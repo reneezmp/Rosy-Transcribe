@@ -44,19 +44,39 @@ enum TranscriptFormatter {
         return turns
     }
 
-    /// Renders grouped turns as the display transcript.
+    /// Renders grouped turns as the display transcript, using whatever names
+    /// have been assigned.
     ///
     /// Falls back to the flat `text` field when there is nothing to group —
     /// an empty `words[]`, or a response with no speech in it. A transcript
     /// without speaker labels is still worth showing.
-    static func format(words: [TranscriptionWord]?, fallbackText: String) -> String {
-        let grouped = turns(from: words ?? [])
-        guard !grouped.isEmpty else {
+    static func format(turns: [SpeakerTurn],
+                       names: [String: String],
+                       fallbackText: String) -> String {
+        guard !turns.isEmpty else {
             return fallbackText.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return grouped
-            .map { "\(label(for: $0.speakerID)):\n\($0.text)" }
+        return turns
+            .map { "\(displayName(for: $0.speakerID, names: names)):\n\($0.text)" }
             .joined(separator: "\n\n")
+    }
+
+    /// Convenience for the unnamed case.
+    static func format(words: [TranscriptionWord]?, fallbackText: String) -> String {
+        format(turns: turns(from: words ?? []), names: [:], fallbackText: fallbackText)
+    }
+
+    /// The name to show for a speaker: the assigned one where there is one,
+    /// otherwise the API's position turned into "Speaker N". A name that is
+    /// blank or only whitespace counts as unassigned, so clearing the field
+    /// returns the speaker to its default rather than leaving a nameless row.
+    static func displayName(for speakerID: String?, names: [String: String]) -> String {
+        if let speakerID,
+           let assigned = names[speakerID]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !assigned.isEmpty {
+            return assigned
+        }
+        return label(for: speakerID)
     }
 
     /// "speaker_0" -> "Speaker 1". The API is zero-indexed; humans are not.
@@ -77,6 +97,20 @@ enum TranscriptFormatter {
         var ordered: [String] = []
         for word in words where isSpokenWord(word) {
             guard let id = word.speakerId, !seen.contains(id) else { continue }
+            seen.insert(id)
+            ordered.append(id)
+        }
+        return ordered
+    }
+
+    /// The distinct speakers in a set of turns, in order of first appearance.
+    /// This is the order the People panel lists them in, and the order colours
+    /// are handed out in.
+    static func speakerIDs(in turns: [SpeakerTurn]) -> [String] {
+        var seen: Set<String> = []
+        var ordered: [String] = []
+        for turn in turns {
+            guard let id = turn.speakerID, !seen.contains(id) else { continue }
             seen.insert(id)
             ordered.append(id)
         }

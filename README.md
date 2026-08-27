@@ -57,7 +57,8 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 | `MultipartBuilder.swift` | The `multipart/form-data` encoder |
 | `Models.swift` | `Codable` structs for the response |
 | `TranscriptFormatter.swift` | `words[]` → grouped speaker turns |
-| `Keyterms.swift` | Glossary parsing, limits, and JSON encoding |
+| `Keyterms.swift` | Glossary parsing and limits |
+| `SpeakerColor.swift` | The speaker palette, free of SwiftUI |
 | `KeychainStore.swift` | The API key, and migration off `UserDefaults` |
 
 `TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
@@ -166,7 +167,30 @@ The docs say "≤50 chars", but the server rejects with "All keywords must be
 less than 50 characters", so the limit is exclusive. Where the two disagree,
 the API wins.
 
+## Speakers
+
+The transcript is laid out in two columns: the speaker on the left, coloured,
+and what they said on the right. After a transcription a **People** panel
+appears listing each speaker found, in order of first appearance, with a text
+field to name them and a swatch to recolour them.
+
+Everyone starts as "Speaker 1", "Speaker 2", … — the API's own numbering,
+one-indexed. Typing a name updates the transcript and Copy All immediately.
+Clearing the field returns that speaker to its numbered label rather than
+leaving a nameless row.
+
+**Names are per transcript and reset with each new file.** The API assigns
+`speaker_0`, `speaker_1`, … by order of first appearance, so `speaker_0` is
+whoever happens to talk first in that particular recording. Carrying names
+across files would mislabel more often than it helped.
+
+The palette is a fixed set of eight system colours rather than a free colour
+well, so every choice stays legible in both light and dark mode.
+`SpeakerColor` is an enum of names with no SwiftUI import; `ContentView` maps
+each case to a `Color` in a switch that must be exhaustive, so the palette and
+its colours cannot drift apart.
+
 ## Not in v1 or v2, deliberately
 
-Speaker renaming, a settings screen, transcript history, file export, SRT
-output, progress percentage.
+A settings screen, transcript history, file export, SRT output, progress
+percentage, audio playback.

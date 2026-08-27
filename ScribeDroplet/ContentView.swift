@@ -38,13 +38,22 @@ final class TranscriberModel: ObservableObject {
 
     @Published var selectedFile: URL?
     @Published var selectedFileSize: Int64?
-    @Published var transcript: String = ""
+    @Published var turns: [SpeakerTurn] = []
+    /// The flat transcript, shown when diarization produced nothing to group.
+    @Published var fallbackText: String = ""
     @Published var detectedLanguage: String?
     @Published var errorMessage: String?
     @Published var isTranscribing: Bool = false
-    /// Surfaced separately from `errorMessage`: a Keychain failure is about
-    /// saving settings, not about the transcription that just ran.
     @Published var keychainWarning: String?
+
+    /// Names and colours assigned to `speaker_0`, `speaker_1`, …
+    ///
+    /// Deliberately reset with each new transcription. The API assigns speaker
+    /// ids by order of first appearance, so `speaker_0` is a different person
+    /// in every recording — carrying names across files would mislabel more
+    /// often than it helped.
+    @Published var speakerNames: [String: String] = [:]
+    @Published var speakerColors: [String: SpeakerColor] = [:]
 
     private let defaults: UserDefaults
     private let service = TranscriptionService()
@@ -75,6 +84,31 @@ final class TranscriberModel: ObservableObject {
 
     var canTranscribe: Bool {
         selectedFile != nil && hasAPIKey && !isTranscribing && keytermsProblem == nil
+    }
+
+    var hasTranscript: Bool {
+        !turns.isEmpty || !fallbackText.isEmpty
+    }
+
+    /// The speakers found, in order of first appearance — the order the People
+    /// panel lists them in and the order colours were handed out in.
+    var speakerIDs: [String] {
+        TranscriptFormatter.speakerIDs(in: turns)
+    }
+
+    /// The whole transcript as text, with the assigned names. This is what
+    /// Copy All puts on the pasteboard.
+    var transcriptText: String {
+        TranscriptFormatter.format(turns: turns, names: speakerNames, fallbackText: fallbackText)
+    }
+
+    func displayName(for speakerID: String?) -> String {
+        TranscriptFormatter.displayName(for: speakerID, names: speakerNames)
+    }
+
+    func color(for speakerID: String?) -> SpeakerColor {
+        guard let speakerID, let color = speakerColors[speakerID] else { return .blue }
+        return color
     }
 
     /// Parsed live so the count and any problem show up while typing, rather
@@ -113,8 +147,7 @@ final class TranscriberModel: ObservableObject {
             .flatMap { $0.fileSize }
             .map { Int64($0) }
         errorMessage = nil
-        transcript = ""
-        detectedLanguage = nil
+        clearTranscript()
     }
 
     func chooseFile() {
@@ -135,8 +168,7 @@ final class TranscriberModel: ObservableObject {
 
         isTranscribing = true
         errorMessage = nil
-        transcript = ""
-        detectedLanguage = nil
+        clearTranscript()
         defer { isTranscribing = false }
 
         do {
@@ -146,9 +178,13 @@ final class TranscriberModel: ObservableObject {
                                                languageCode: language.languageCode,
                                                keyterms: terms)
             let response = try await service.transcribe(request)
-            transcript = TranscriptFormatter.format(words: response.words, fallbackText: response.text)
+
+            turns = TranscriptFormatter.turns(from: response.words ?? [])
+            fallbackText = response.text
+            speakerColors = SpeakerColor.assign(to: speakerIDs)
             detectedLanguage = Self.describeLanguage(response)
-            if transcript.isEmpty {
+
+            if !hasTranscript {
                 errorMessage = "The transcription came back empty. There may be no speech in that file."
             }
         } catch {
@@ -159,13 +195,21 @@ final class TranscriberModel: ObservableObject {
     }
 
     func copyTranscript() {
-        guard !transcript.isEmpty else { return }
+        guard hasTranscript else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(transcript, forType: .string)
+        pasteboard.setString(transcriptText, forType: .string)
     }
 
     // MARK: Helpers
+
+    private func clearTranscript() {
+        turns = []
+        fallbackText = ""
+        speakerNames = [:]
+        speakerColors = [:]
+        detectedLanguage = nil
+    }
 
     private func persistAPIKey() {
         do {
@@ -207,6 +251,23 @@ final class TranscriberModel: ObservableObject {
     }
 }
 
+/// The one place `SpeakerColor` meets SwiftUI. The switch must be exhaustive,
+/// so a colour cannot be added to the palette without being given a value here.
+extension SpeakerColor {
+    var color: Color {
+        switch self {
+        case .blue: return .blue
+        case .orange: return .orange
+        case .green: return .green
+        case .purple: return .purple
+        case .pink: return .pink
+        case .teal: return .teal
+        case .indigo: return .indigo
+        case .brown: return .brown
+        }
+    }
+}
+
 // MARK: - View
 
 struct ContentView: View {
@@ -215,15 +276,23 @@ struct ContentView: View {
     @State private var isDropTargeted = false
     @State private var isKeyVisible = false
 
+    private let speakerColumnWidth: CGFloat = 120
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             settings
             dropZone
             controls
-            resultArea
+            HStack(alignment: .top, spacing: 12) {
+                resultArea
+                if !model.speakerIDs.isEmpty {
+                    peoplePanel
+                        .frame(width: 210)
+                }
+            }
         }
         .padding(18)
-        .frame(minWidth: 560, minHeight: 680)
+        .frame(minWidth: 760, minHeight: 700)
     }
 
     // MARK: Settings
@@ -315,7 +384,7 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 26)
+        .padding(.vertical, 22)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(isDropTargeted ? Color.accentColor.opacity(0.12) : Color.gray.opacity(0.07))
@@ -359,11 +428,11 @@ struct ContentView: View {
             Spacer()
 
             Button("Copy All") { model.copyTranscript() }
-                .disabled(model.transcript.isEmpty)
+                .disabled(!model.hasTranscript)
         }
     }
 
-    // MARK: Result
+    // MARK: Transcript
 
     private var resultArea: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -382,18 +451,92 @@ struct ContentView: View {
             }
 
             ScrollView {
-                Text(model.transcript.isEmpty ? "The transcript will appear here." : model.transcript)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(model.transcript.isEmpty ? Color.secondary : Color.primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
+                // Lazy, because a forty-minute meeting is hundreds of turns and
+                // Rosy is a dual-core Intel.
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if model.turns.isEmpty {
+                        Text(model.fallbackText.isEmpty
+                             ? "The transcript will appear here."
+                             : model.fallbackText)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(model.fallbackText.isEmpty ? Color.secondary : Color.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        // Indices rather than `enumerated()`: Swift has no
+                        // key path to a tuple element, so `id: \.offset`
+                        // does not compile.
+                        ForEach(model.turns.indices, id: \.self) { index in
+                            turnRow(model.turns[index])
+                        }
+                    }
+                }
+                .padding(10)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07))
             )
         }
+    }
+
+    private func turnRow(_ turn: SpeakerTurn) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(model.displayName(for: turn.speakerID))
+                .font(.system(.body, design: .monospaced).weight(.semibold))
+                .foregroundStyle(model.color(for: turn.speakerID).color)
+                .frame(width: speakerColumnWidth, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(turn.text)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: People
+
+    private var peoplePanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("People")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            ForEach(model.speakerIDs, id: \.self) { id in
+                HStack(spacing: 6) {
+                    Menu {
+                        ForEach(SpeakerColor.allCases, id: \.self) { option in
+                            Button(option.displayName) { model.speakerColors[id] = option }
+                        }
+                    } label: {
+                        Circle()
+                            .fill(model.color(for: id).color)
+                            .frame(width: 13, height: 13)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Change speaker colour")
+
+                    // The placeholder is the default label, so an empty field
+                    // shows exactly what the transcript shows.
+                    TextField(TranscriptFormatter.label(for: id),
+                              text: Binding(get: { model.speakerNames[id] ?? "" },
+                                            set: { model.speakerNames[id] = $0 }))
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+
+            Text("Names apply to this transcript only — the API numbers speakers by who talks first, so they mean something different in the next recording.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer()
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
     }
 }
 

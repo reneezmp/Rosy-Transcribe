@@ -237,3 +237,100 @@ final class TranscriptionErrorTests: XCTestCase {
                       "Expected \"\(needle)\" in: \(message)", file: file, line: line)
     }
 }
+
+// MARK: - Speaker naming
+
+final class SpeakerNamingTests: XCTestCase {
+
+    private func turn(_ text: String, _ speaker: String?) -> SpeakerTurn {
+        SpeakerTurn(speakerID: speaker, text: text)
+    }
+
+    func testAnAssignedNameReplacesTheDefaultLabel() {
+        XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_0",
+                                                       names: ["speaker_0": "Lilian"]),
+                       "Lilian")
+    }
+
+    func testAnUnnamedSpeakerKeepsItsNumberedLabel() {
+        XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_1", names: [:]), "Speaker 2")
+        XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_1",
+                                                       names: ["speaker_0": "Lilian"]),
+                       "Speaker 2")
+    }
+
+    /// Clearing the field must return the speaker to its default rather than
+    /// leaving a nameless row.
+    func testABlankNameFallsBackToTheDefaultLabel() {
+        XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_0", names: ["speaker_0": ""]),
+                       "Speaker 1")
+        XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_0", names: ["speaker_0": "   "]),
+                       "Speaker 1")
+    }
+
+    func testNamesAreTrimmed() {
+        XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_0",
+                                                       names: ["speaker_0": "  João  "]),
+                       "João")
+    }
+
+    func testRenderedTranscriptUsesAssignedNames() {
+        let turns = [turn("Bom dia.", "speaker_0"), turn("Oi.", "speaker_1")]
+        let names = ["speaker_0": "Lilian", "speaker_1": "João"]
+        XCTAssertEqual(TranscriptFormatter.format(turns: turns, names: names, fallbackText: ""),
+                       "Lilian:\nBom dia.\n\nJoão:\nOi.")
+    }
+
+    func testPartiallyNamedTranscriptMixesNamesAndDefaults() {
+        let turns = [turn("Bom dia.", "speaker_0"), turn("Oi.", "speaker_1")]
+        XCTAssertEqual(TranscriptFormatter.format(turns: turns,
+                                                  names: ["speaker_0": "Lilian"],
+                                                  fallbackText: ""),
+                       "Lilian:\nBom dia.\n\nSpeaker 2:\nOi.")
+    }
+
+    func testFormattingStillFallsBackWhenThereAreNoTurns() {
+        XCTAssertEqual(TranscriptFormatter.format(turns: [],
+                                                  names: ["speaker_0": "Lilian"],
+                                                  fallbackText: "  Bom dia. "),
+                       "Bom dia.")
+    }
+
+    func testSpeakerIDsFromTurnsAreInOrderOfFirstAppearance() {
+        let turns = [turn("a", "speaker_1"), turn("b", "speaker_0"), turn("c", "speaker_1")]
+        XCTAssertEqual(TranscriptFormatter.speakerIDs(in: turns), ["speaker_1", "speaker_0"])
+    }
+
+    func testTurnsWithoutASpeakerContributeNoRowToThePeoplePanel() {
+        XCTAssertEqual(TranscriptFormatter.speakerIDs(in: [turn("a", nil)]), [])
+    }
+}
+
+// MARK: - Speaker colours
+
+final class SpeakerColorTests: XCTestCase {
+
+    func testColoursAreHandedOutInOrderOfFirstAppearance() {
+        let colors = SpeakerColor.assign(to: ["speaker_1", "speaker_0"])
+        XCTAssertEqual(colors["speaker_1"], .blue)
+        XCTAssertEqual(colors["speaker_0"], .orange)
+    }
+
+    func testEverySpeakerInATypicalMeetingGetsADistinctColour() {
+        let ids = (0..<SpeakerColor.allCases.count).map { "speaker_\($0)" }
+        let assigned = SpeakerColor.assign(to: ids)
+        XCTAssertEqual(Set(assigned.values).count, SpeakerColor.allCases.count)
+    }
+
+    /// More speakers than colours is unlikely but must not crash.
+    func testColoursWrapAroundBeyondThePalette() {
+        let count = SpeakerColor.allCases.count
+        XCTAssertEqual(SpeakerColor.forSpeaker(atIndex: count), .blue)
+        XCTAssertEqual(SpeakerColor.forSpeaker(atIndex: count + 1), .orange)
+        XCTAssertEqual(SpeakerColor.forSpeaker(atIndex: -1), SpeakerColor.allCases.last)
+    }
+
+    func testNoSpeakersMeansNoColours() {
+        XCTAssertTrue(SpeakerColor.assign(to: []).isEmpty)
+    }
+}
