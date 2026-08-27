@@ -7,5 +7,6 @@ struct ScribeDropletApp: App {
             ContentView()
         }
         .windowResizability(.contentMinSize)
+        .defaultSize(width: 1040, height: 680)
     }
 }

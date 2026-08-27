@@ -487,13 +487,14 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             if model.records.isEmpty {
-                Spacer()
+                // Centred with a flexible frame rather than two Spacers, which
+                // would demand unbounded height the way the People panel did.
                 Text("Transcriptions you make are saved here automatically.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding()
-                Spacer()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: Binding(get: { model.currentRecordID },
                                         set: { if let id = $0, id != model.currentRecordID { model.open(id) } })) {
@@ -541,9 +542,16 @@ struct ContentView: View {
                         .frame(width: 200)
                 }
             }
+            // Takes the leftover height, but with a bounded *ideal* height so
+            // the window does not try to size itself to fit a whole meeting.
+            .frame(minHeight: 140, idealHeight: 300, maxHeight: .infinity)
         }
         .padding(18)
-        .frame(minWidth: 700, minHeight: 700)
+        // Rosy's screen is 1280x800, which leaves roughly 720pt once the menu
+        // bar and the title bar are gone. A 700pt minimum plus padding was
+        // taller than that, so the window could not be shortened at all and
+        // sprang back to full height whenever it was moved.
+        .frame(minWidth: 640, idealWidth: 1040, minHeight: 400, idealHeight: 680)
         // NavigationSplitView provides its own sidebar toggle; adding one
         // here produced two.
         .toolbar {
@@ -768,6 +776,9 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
+        // Without this the scrolling content painted straight past the bottom
+        // of the box and off the window.
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func turnRow(at index: Int) -> some View {
@@ -875,11 +886,13 @@ struct ContentView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            Spacer()
         }
         .padding(10)
+        // Accepts the height the row offers rather than demanding all of it,
+        // which a trailing Spacer() used to do.
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
