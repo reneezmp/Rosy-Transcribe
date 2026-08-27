@@ -10,18 +10,98 @@ import UniformTypeIdentifiers
 @MainActor
 final class TranscriberModel: ObservableObject {
 
+    private enum DefaultsKey {
+        static let language = "transcriptionLanguage"
+        static let keyterms = "keyterms"
+    }
+
+    // MARK: Settings
+
+    /// Lives in the Keychain, not UserDefaults. Written on every edit — a
+    /// Keychain write of a fifty-byte item is far too cheap to be worth
+    /// debouncing, and this way a key typed and never used is still saved.
+    @Published var apiKey: String = "" {
+        didSet { persistAPIKey() }
+    }
+
+    @Published var language: TranscriptionLanguage {
+        didSet { defaults.set(language.rawValue, forKey: DefaultsKey.language) }
+    }
+
+    /// Free text: commas or newlines between terms. Not a secret, so plain
+    /// UserDefaults is the right home for it.
+    @Published var keytermsText: String {
+        didSet { defaults.set(keytermsText, forKey: DefaultsKey.keyterms) }
+    }
+
+    // MARK: Transcription state
+
     @Published var selectedFile: URL?
     @Published var selectedFileSize: Int64?
     @Published var transcript: String = ""
     @Published var detectedLanguage: String?
     @Published var errorMessage: String?
     @Published var isTranscribing: Bool = false
+    /// Surfaced separately from `errorMessage`: a Keychain failure is about
+    /// saving settings, not about the transcription that just ran.
+    @Published var keychainWarning: String?
 
+    private let defaults: UserDefaults
     private let service = TranscriptionService()
 
-    var canTranscribe: Bool {
-        selectedFile != nil && !isTranscribing
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.language = TranscriptionLanguage(rawValue: defaults.string(forKey: DefaultsKey.language) ?? "")
+            ?? .portuguese
+        self.keytermsText = defaults.string(forKey: DefaultsKey.keyterms) ?? ""
+
+        // v1 stored the key in UserDefaults. Move it across and delete the
+        // plist copy. Assigning in init does not fire didSet, which is what
+        // we want: this is a load, not an edit.
+        KeychainStore.migrateLegacyKeyIfNeeded(defaults: defaults)
+        do {
+            self.apiKey = try KeychainStore.read() ?? ""
+        } catch {
+            self.apiKey = ""
+            self.keychainWarning = error.localizedDescription
+        }
     }
+
+    // MARK: Derived state
+
+    var hasAPIKey: Bool {
+        !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var canTranscribe: Bool {
+        selectedFile != nil && hasAPIKey && !isTranscribing && keytermsProblem == nil
+    }
+
+    /// Parsed live so the count and any problem show up while typing, rather
+    /// than as a surprise when the Transcribe button is pressed.
+    var keyterms: [String] {
+        Keyterms.parse(keytermsText)
+    }
+
+    var keytermsProblem: String? {
+        do {
+            try Keyterms.validate(keyterms)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    var keytermsSummary: String {
+        let count = keyterms.count
+        switch count {
+        case 0: return "No key terms. Names and uncommon vocabulary go here."
+        case 1: return "1 key term of \(Keyterms.maxCount)."
+        default: return "\(count) key terms of \(Keyterms.maxCount)."
+        }
+    }
+
+    // MARK: Actions
 
     func selectFile(_ url: URL) {
         guard isAcceptableFile(url) else {
@@ -50,7 +130,7 @@ final class TranscriberModel: ObservableObject {
         }
     }
 
-    func transcribe(apiKey: String, language: TranscriptionLanguage) async {
+    func transcribe() async {
         guard let fileURL = selectedFile else { return }
 
         isTranscribing = true
@@ -59,10 +139,12 @@ final class TranscriberModel: ObservableObject {
         detectedLanguage = nil
         defer { isTranscribing = false }
 
-        let request = TranscriptionRequest(fileURL: fileURL,
-                                           apiKey: apiKey,
-                                           languageCode: language.languageCode)
         do {
+            let terms = try Keyterms.validated(keytermsText)
+            let request = TranscriptionRequest(fileURL: fileURL,
+                                               apiKey: apiKey,
+                                               languageCode: language.languageCode,
+                                               keyterms: terms)
             let response = try await service.transcribe(request)
             transcript = TranscriptFormatter.format(words: response.words, fallbackText: response.text)
             detectedLanguage = Self.describeLanguage(response)
@@ -70,8 +152,8 @@ final class TranscriberModel: ObservableObject {
                 errorMessage = "The transcription came back empty. There may be no speech in that file."
             }
         } catch {
-            // localizedDescription carries the actionable text for
-            // TranscriptionError; anything else falls back to its own.
+            // localizedDescription carries the actionable text for both
+            // TranscriptionError and KeytermsError.
             errorMessage = error.localizedDescription
         }
     }
@@ -83,7 +165,21 @@ final class TranscriberModel: ObservableObject {
         pasteboard.setString(transcript, forType: .string)
     }
 
-    // MARK: - Helpers
+    // MARK: Helpers
+
+    private func persistAPIKey() {
+        do {
+            let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                try KeychainStore.delete()
+            } else {
+                try KeychainStore.save(trimmed)
+            }
+            keychainWarning = nil
+        } catch {
+            keychainWarning = "The API key could not be saved: \(error.localizedDescription)"
+        }
+    }
 
     private func isAcceptableFile(_ url: URL) -> Bool {
         MultipartBuilder.audioPathExtensions.contains(url.pathExtension.lowercased())
@@ -115,17 +211,9 @@ final class TranscriberModel: ObservableObject {
 
 struct ContentView: View {
 
-    // UserDefaults, not the Keychain. Good enough for a first build; see the
-    // README for why it is worth moving before this key gets valuable.
-    @AppStorage("elevenLabsAPIKey") private var apiKey: String = ""
-    @AppStorage("transcriptionLanguage") private var languageRawValue: String = TranscriptionLanguage.portuguese.rawValue
-
     @StateObject private var model = TranscriberModel()
     @State private var isDropTargeted = false
-
-    private var language: TranscriptionLanguage {
-        TranscriptionLanguage(rawValue: languageRawValue) ?? .auto
-    }
+    @State private var isKeyVisible = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -135,7 +223,7 @@ struct ContentView: View {
             resultArea
         }
         .padding(18)
-        .frame(minWidth: 520, minHeight: 620)
+        .frame(minWidth: 560, minHeight: 680)
     }
 
     // MARK: Settings
@@ -146,18 +234,58 @@ struct ContentView: View {
                 Text("ElevenLabs API key")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                TextField("xi-api-key", text: $apiKey)
+                HStack(spacing: 6) {
+                    // Masked by default, so the key does not end up in a
+                    // screenshot. Revealable, because a pasted key you cannot
+                    // see is a key you cannot check for a stray space.
+                    Group {
+                        if isKeyVisible {
+                            TextField("xi-api-key", text: $model.apiKey)
+                        } else {
+                            SecureField("xi-api-key", text: $model.apiKey)
+                        }
+                    }
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
+
+                    Button {
+                        isKeyVisible.toggle()
+                    } label: {
+                        Image(systemName: isKeyVisible ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(isKeyVisible ? "Hide the key" : "Show the key")
+                }
+                if let keychainWarning = model.keychainWarning {
+                    Text(keychainWarning)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
-            Picker("Language", selection: $languageRawValue) {
+            Picker("Language", selection: $model.language) {
                 ForEach(TranscriptionLanguage.allCases) { language in
-                    Text(language.displayName).tag(language.rawValue)
+                    Text(language.displayName).tag(language)
                 }
             }
             .pickerStyle(.menu)
             .fixedSize()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Key terms")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TextField("proferida, averbação, embargos de terceiros, Dr. Christopher",
+                          text: $model.keytermsText,
+                          axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(2...4)
+                Text(model.keytermsProblem ?? model.keytermsSummary)
+                    .font(.caption)
+                    .foregroundStyle(model.keytermsProblem == nil ? Color.secondary : Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -212,13 +340,13 @@ struct ContentView: View {
     private var controls: some View {
         HStack(spacing: 12) {
             Button {
-                Task { await model.transcribe(apiKey: apiKey, language: language) }
+                Task { await model.transcribe() }
             } label: {
                 Text(model.isTranscribing ? "Transcribing…" : "Transcribe")
                     .frame(minWidth: 90)
             }
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(!model.canTranscribe || apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(!model.canTranscribe)
 
             if model.isTranscribing {
                 ProgressView()

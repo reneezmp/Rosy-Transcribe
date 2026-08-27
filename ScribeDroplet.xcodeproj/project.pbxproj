@@ -19,6 +19,10 @@
 		1B000000000000000000000A /* MultipartBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000004 /* MultipartBuilder.swift */; };
 		1B000000000000000000000B /* TranscriptFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000006 /* TranscriptFormatter.swift */; };
 		1B000000000000000000000C /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000003 /* TranscriptionService.swift */; };
+		1B000000000000000000000D /* Keyterms.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000000B /* Keyterms.swift */; };
+		1B000000000000000000000E /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000000C /* KeychainStore.swift */; };
+		1B000000000000000000000F /* Keyterms.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000000B /* Keyterms.swift */; };
+		1B0000000000000000000010 /* KeytermsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000000D /* KeytermsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +36,9 @@
 		1A0000000000000000000008 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000000009 /* ScribeDroplet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScribeDroplet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A000000000000000000000A /* ScribeDropletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScribeDropletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A000000000000000000000B /* Keyterms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keyterms.swift; sourceTree = "<group>"; };
+		1A000000000000000000000C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		1A000000000000000000000D /* KeytermsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeytermsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +77,8 @@
 				1A0000000000000000000004 /* MultipartBuilder.swift */,
 				1A0000000000000000000005 /* Models.swift */,
 				1A0000000000000000000006 /* TranscriptFormatter.swift */,
+				1A000000000000000000000B /* Keyterms.swift */,
+				1A000000000000000000000C /* KeychainStore.swift */,
 			);
 			path = ScribeDroplet;
 			sourceTree = "<group>";
@@ -79,6 +88,7 @@
 			children = (
 				1A0000000000000000000007 /* MultipartBuilderTests.swift */,
 				1A0000000000000000000008 /* TranscriptFormatterTests.swift */,
+				1A000000000000000000000D /* KeytermsTests.swift */,
 			);
 			path = ScribeDropletTests;
 			sourceTree = "<group>";
@@ -194,6 +204,8 @@
 				1B0000000000000000000001 /* ScribeDropletApp.swift in Sources */,
 				1B0000000000000000000006 /* TranscriptFormatter.swift in Sources */,
 				1B0000000000000000000003 /* TranscriptionService.swift in Sources */,
+				1B000000000000000000000D /* Keyterms.swift in Sources */,
+				1B000000000000000000000E /* KeychainStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -207,6 +219,8 @@
 				1B000000000000000000000A /* MultipartBuilder.swift in Sources */,
 				1B000000000000000000000B /* TranscriptFormatter.swift in Sources */,
 				1B000000000000000000000C /* TranscriptionService.swift in Sources */,
+				1B000000000000000000000F /* Keyterms.swift in Sources */,
+				1B0000000000000000000010 /* KeytermsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

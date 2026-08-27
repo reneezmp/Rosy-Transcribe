@@ -114,6 +114,15 @@ struct TranscriptionRequest {
     let apiKey: String
     /// Nil auto-detects.
     let languageCode: String?
+    /// Terms to bias recognition. Empty means: do not send the parameter.
+    let keyterms: [String]
+
+    init(fileURL: URL, apiKey: String, languageCode: String?, keyterms: [String] = []) {
+        self.fileURL = fileURL
+        self.apiKey = apiKey
+        self.languageCode = languageCode
+        self.keyterms = keyterms
+    }
 }
 
 /// The one place that talks to ElevenLabs.
@@ -162,6 +171,10 @@ struct TranscriptionService {
         // same thing as sending nothing.
         if let languageCode = request.languageCode {
             fields["language_code"] = languageCode
+        }
+        // Likewise: no glossary means no parameter, not an empty array.
+        if let keyterms = Keyterms.formFieldValue(request.keyterms) {
+            fields["keyterms"] = keyterms
         }
 
         let builder = MultipartBuilder(boundary: boundaryProvider())

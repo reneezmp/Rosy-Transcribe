@@ -39,11 +39,13 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 
 ## Use
 
-1. Paste your ElevenLabs API key into the field at the top. It is remembered.
+1. Paste your ElevenLabs API key into the field at the top. It is stored in
+   the Keychain and remembered. The field is masked; the eye button reveals it.
 2. Pick a language, or leave it on Auto-detect.
-3. Drop an audio file on the drop zone, or click it to pick one.
-4. Transcribe. Long recordings take several minutes — most of it is upload.
-5. Copy All.
+3. Optionally add key terms — see below. They are remembered too.
+4. Drop an audio file on the drop zone, or click it to pick one.
+5. Transcribe. Long recordings take several minutes — most of it is upload.
+6. Copy All.
 
 ## How it works
 
@@ -55,10 +57,13 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 | `MultipartBuilder.swift` | The `multipart/form-data` encoder |
 | `Models.swift` | `Codable` structs for the response |
 | `TranscriptFormatter.swift` | `words[]` → grouped speaker turns |
+| `Keyterms.swift` | Glossary parsing, limits, and JSON encoding |
+| `KeychainStore.swift` | The API key, and migration off `UserDefaults` |
 
-`TranscriptFormatter` and `MultipartBuilder` are free of UI and networking
-types, which is what makes them testable without an API key. `ScribeDropletTests`
-covers both, plus response decoding and the HTTP-status → message mapping.
+`TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
+networking types, which is what makes them testable without an API key.
+`ScribeDropletTests` covers all three, plus response decoding and the
+HTTP-status → message mapping.
 
 ### The API request
 
@@ -72,6 +77,7 @@ model_id                scribe_v2
 diarize                 true
 timestamps_granularity  word
 language_code           por | eng | spa   (omitted entirely for auto-detect)
+keyterms                ["proferida","averbação"]   (omitted when empty)
 ```
 
 The response carries `text`, `language_code`, `language_probability`,
@@ -122,11 +128,33 @@ finding that out on a ten-second clip is much faster than on a full meeting.
 Steps 1–3 can run on the M4. Step 4 has to happen on Rosy; it is the only test
 that exercises the actual constraint.
 
-## Not in v1, deliberately
+## The API key
 
-Speaker renaming, Keychain, a settings screen, transcript history, file export,
-SRT output, progress percentage, keyterms.
+The key lives in the login Keychain, under service `com.rosy.ScribeDroplet`.
+v1 kept it in `UserDefaults` — a plist any process running as you can read —
+and `KeychainStore.migrateLegacyKeyIfNeeded()` moves an old key across on
+first launch and deletes the plist copy. That migration only removes the copy
+once the Keychain write has succeeded, so a failure loses nothing.
 
-The API key is stored in `UserDefaults`, which means a plist readable by
-anything running as your user. That is fine for a first build and worth fixing
-before this key is attached to anything expensive.
+**Expect a Keychain prompt after each rebuild.** The app is ad-hoc signed, so
+its signature changes every time you build it, and macOS treats each build as
+a different application asking for the same secret. Click "Always Allow" and
+it will stay quiet until the next build. This is a consequence of not having a
+paid Developer Program identity, not a bug.
+
+## Key terms
+
+The API accepts up to 100 terms to bias recognition, which is worth using for
+proper nouns and specialised vocabulary. Scribe will otherwise hear the common
+word rather than the right one — a legal decision is *proferida*, handed down,
+but it comes back as *preferida*, preferred, which is a real word in a
+plausible place and therefore easy to miss when proofreading.
+
+Type them separated by commas or newlines. Limits are enforced before the
+upload starts rather than after: at most 100 terms, each at most 50 characters
+and 5 words.
+
+## Not in v1 or v2, deliberately
+
+Speaker renaming, a settings screen, transcript history, file export, SRT
+output, progress percentage.
