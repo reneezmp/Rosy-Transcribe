@@ -30,6 +30,7 @@
 		1B0000000000000000000015 /* TranscriptRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000010 /* TranscriptRecordTests.swift */; };
 		1B0000000000000000000016 /* SpeakerEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000011 /* SpeakerEditor.swift */; };
 		1B0000000000000000000017 /* SpeakerEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000011 /* SpeakerEditor.swift */; };
+		1B0000000000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000012 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +51,7 @@
 		1A000000000000000000000F /* TranscriptRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptRecord.swift; sourceTree = "<group>"; };
 		1A0000000000000000000010 /* TranscriptRecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptRecordTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000000011 /* SpeakerEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerEditor.swift; sourceTree = "<group>"; };
+		1A0000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +95,7 @@
 				1A000000000000000000000E /* SpeakerColor.swift */,
 				1A000000000000000000000F /* TranscriptRecord.swift */,
 				1A0000000000000000000011 /* SpeakerEditor.swift */,
+				1A0000000000000000000012 /* Assets.xcassets */,
 			);
 			path = ScribeDroplet;
 			sourceTree = "<group>";
@@ -196,6 +199,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1B0000000000000000000018 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -299,6 +303,7 @@
 		210000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -326,6 +331,7 @@
 		210000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;

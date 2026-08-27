@@ -260,6 +260,22 @@ is what pastes cleanly into a document.
 The title defaults to the dropped file's name and is never overwritten once
 you have typed one.
 
+## The icon
+
+Rose gold, with a microphone. `Tools/make_icon.py` draws it and writes the ten
+PNGs of `ScribeDroplet/Assets.xcassets/AppIcon.appiconset`:
+
+```sh
+python3 Tools/make_icon.py
+```
+
+No image library, because none is needed and the project takes no
+dependencies. Every shape is a signed distance function, so a pixel's coverage
+comes straight from its distance to the nearest edge — which gives exact
+anti-aliasing at every size from one sample per pixel, using only `zlib` and
+`struct`. Edit the constants at the top of the script and re-run it to change
+the colours or the proportions.
+
 ## Not in v1 or v2, deliberately
 
 A settings screen, SRT output, progress percentage, audio playback.
