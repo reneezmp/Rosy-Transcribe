@@ -1,7 +1,7 @@
 import Foundation
 
 /// One run of consecutive words spoken by the same speaker.
-struct SpeakerTurn: Equatable {
+struct SpeakerTurn: Equatable, Codable {
     /// The raw API id, e.g. "speaker_0". Nil when diarization returned nothing.
     let speakerID: String?
     let text: String
@@ -64,6 +64,30 @@ enum TranscriptFormatter {
     /// Convenience for the unnamed case.
     static func format(words: [TranscriptionWord]?, fallbackText: String) -> String {
         format(turns: turns(from: words ?? []), names: [:], fallbackText: fallbackText)
+    }
+
+    /// The same transcript as Markdown, for saving to a file.
+    ///
+    /// Speakers become bold lines rather than "Name:" lines, which is what
+    /// renders sensibly in a Markdown viewer. The title becomes the H1 and is
+    /// omitted entirely when blank, rather than leaving an empty heading.
+    static func markdown(title: String,
+                         turns: [SpeakerTurn],
+                         names: [String: String],
+                         fallbackText: String) -> String {
+        var out = ""
+        let heading = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !heading.isEmpty {
+            out += "# \(heading)\n\n"
+        }
+        guard !turns.isEmpty else {
+            let flat = fallbackText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return flat.isEmpty ? out : out + flat + "\n"
+        }
+        out += turns
+            .map { "**\(displayName(for: $0.speakerID, names: names))**\n\($0.text)" }
+            .joined(separator: "\n\n")
+        return out + "\n"
     }
 
     /// The name to show for a speaker: the assigned one where there is one,

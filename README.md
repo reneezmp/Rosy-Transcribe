@@ -59,6 +59,7 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 | `TranscriptFormatter.swift` | `words[]` → grouped speaker turns |
 | `Keyterms.swift` | Glossary parsing and limits |
 | `SpeakerColor.swift` | The speaker palette, free of SwiftUI |
+| `TranscriptRecord.swift` | A saved transcript, and the on-disk store |
 | `KeychainStore.swift` | The API key, and migration off `UserDefaults` |
 
 `TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
@@ -190,7 +191,53 @@ well, so every choice stays legible in both light and dark mode.
 each case to a `Color` in a switch that must be exhaustive, so the palette and
 its colours cannot drift apart.
 
+## The library
+
+Every transcription is saved automatically, the moment it comes back — a
+transcription costs money and minutes, and must survive a crash. The sidebar
+lists them newest first; click one to reopen it exactly as it was left, names
+and colours included. The toolbar has a toggle to collapse the sidebar and a
+button to start a new transcription.
+
+Edits to the title, a speaker's name, or a speaker's colour are saved on a
+1.2-second delay. Writing the whole transcript on every keystroke would be a
+lot of file I/O on a 2017 dual-core.
+
+Transcripts live in:
+
+```
+~/Library/Application Support/ScribeDroplet/Transcripts/<uuid>.json
+```
+
+One pretty-printed JSON file each, rather than a single library file. A write
+only ever risks the transcript being written, a file that somehow becomes
+unreadable costs one meeting rather than all of them, and any of them can be
+opened in a text editor. **The audio is not kept** — this app never opens it,
+and a library of meeting recordings is a much bigger thing to look after than
+a library of text.
+
+## Saving as Markdown
+
+**Save as Markdown…** writes the transcript out as:
+
+```markdown
+# Title of the meeting
+
+**Renée**
+Blablablabla
+
+**Lilian**
+Blablablabla
+```
+
+Speakers become bold lines rather than `Name:` lines, which is what renders
+sensibly in a Markdown viewer. A blank title produces no heading rather than
+an empty one. **Copy All** still copies plain text in the `Name:` form, which
+is what pastes cleanly into a document.
+
+The title defaults to the dropped file's name and is never overwritten once
+you have typed one.
+
 ## Not in v1 or v2, deliberately
 
-A settings screen, transcript history, file export, SRT output, progress
-percentage, audio playback.
+A settings screen, SRT output, progress percentage, audio playback.

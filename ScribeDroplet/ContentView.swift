@@ -34,10 +34,14 @@ final class TranscriberModel: ObservableObject {
         didSet { defaults.set(keytermsText, forKey: DefaultsKey.keyterms) }
     }
 
-    // MARK: Transcription state
+    // MARK: The transcript being worked on
 
+    @Published var title: String = "" {
+        didSet { scheduleSave() }
+    }
     @Published var selectedFile: URL?
     @Published var selectedFileSize: Int64?
+    @Published var sourceFilename: String = ""
     @Published var turns: [SpeakerTurn] = []
     /// The flat transcript, shown when diarization produced nothing to group.
     @Published var fallbackText: String = ""
@@ -45,24 +49,42 @@ final class TranscriberModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isTranscribing: Bool = false
     @Published var keychainWarning: String?
+    @Published var storeWarning: String?
 
     /// Names and colours assigned to `speaker_0`, `speaker_1`, …
     ///
-    /// Deliberately reset with each new transcription. The API assigns speaker
-    /// ids by order of first appearance, so `speaker_0` is a different person
-    /// in every recording — carrying names across files would mislabel more
-    /// often than it helped.
-    @Published var speakerNames: [String: String] = [:]
-    @Published var speakerColors: [String: SpeakerColor] = [:]
+    /// Saved with the transcript, but never carried to the next one: the API
+    /// assigns speaker ids by order of first appearance, so `speaker_0` is a
+    /// different person in every recording.
+    @Published var speakerNames: [String: String] = [:] {
+        didSet { scheduleSave() }
+    }
+    @Published var speakerColors: [String: SpeakerColor] = [:] {
+        didSet { scheduleSave() }
+    }
+
+    // MARK: The library
+
+    @Published private(set) var records: [TranscriptRecord] = []
+    @Published private(set) var currentRecordID: UUID?
+
+    private var currentCreatedAt = Date()
+    /// Suppresses autosave while a record is being loaded into the editor —
+    /// otherwise opening a transcript immediately writes it back.
+    private var isLoadingRecord = false
+    private var saveTask: Task<Void, Never>?
 
     private let defaults: UserDefaults
+    private let store: TranscriptStore
     private let service = TranscriptionService()
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, store: TranscriptStore = TranscriptStore()) {
         self.defaults = defaults
+        self.store = store
         self.language = TranscriptionLanguage(rawValue: defaults.string(forKey: DefaultsKey.language) ?? "")
             ?? .portuguese
         self.keytermsText = defaults.string(forKey: DefaultsKey.keyterms) ?? ""
+        self.records = store.load()
 
         // v1 stored the key in UserDefaults. Move it across and delete the
         // plist copy. Assigning in init does not fire didSet, which is what
@@ -96,10 +118,17 @@ final class TranscriberModel: ObservableObject {
         TranscriptFormatter.speakerIDs(in: turns)
     }
 
-    /// The whole transcript as text, with the assigned names. This is what
-    /// Copy All puts on the pasteboard.
+    /// The transcript as plain text, for the pasteboard.
     var transcriptText: String {
         TranscriptFormatter.format(turns: turns, names: speakerNames, fallbackText: fallbackText)
+    }
+
+    /// The transcript as Markdown, for saving to a file.
+    var markdownText: String {
+        TranscriptFormatter.markdown(title: title,
+                                     turns: turns,
+                                     names: speakerNames,
+                                     fallbackText: fallbackText)
     }
 
     func displayName(for speakerID: String?) -> String {
@@ -135,7 +164,7 @@ final class TranscriberModel: ObservableObject {
         }
     }
 
-    // MARK: Actions
+    // MARK: Choosing a file
 
     func selectFile(_ url: URL) {
         guard isAcceptableFile(url) else {
@@ -147,7 +176,15 @@ final class TranscriberModel: ObservableObject {
             .flatMap { $0.fileSize }
             .map { Int64($0) }
         errorMessage = nil
-        clearTranscript()
+
+        // A dropped file is the start of a new transcript, not an edit of the
+        // one on screen.
+        beginNewRecord()
+        // Seed the title from the filename, but never overwrite one already
+        // typed.
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            title = url.deletingPathExtension().lastPathComponent
+        }
     }
 
     func chooseFile() {
@@ -162,6 +199,8 @@ final class TranscriberModel: ObservableObject {
             selectFile(url)
         }
     }
+
+    // MARK: Transcribing
 
     func transcribe() async {
         guard let fileURL = selectedFile else { return }
@@ -179,12 +218,19 @@ final class TranscriberModel: ObservableObject {
                                                keyterms: terms)
             let response = try await service.transcribe(request)
 
+            isLoadingRecord = true
             turns = TranscriptFormatter.turns(from: response.words ?? [])
             fallbackText = response.text
             speakerColors = SpeakerColor.assign(to: speakerIDs)
             detectedLanguage = Self.describeLanguage(response)
+            sourceFilename = fileURL.lastPathComponent
+            isLoadingRecord = false
 
-            if !hasTranscript {
+            if hasTranscript {
+                // Saved straight away rather than on a timer: a transcription
+                // costs money and minutes, and must survive a crash.
+                saveCurrentRecord()
+            } else {
                 errorMessage = "The transcription came back empty. There may be no speech in that file."
             }
         } catch {
@@ -194,6 +240,65 @@ final class TranscriberModel: ObservableObject {
         }
     }
 
+    // MARK: The library
+
+    func open(_ id: UUID) {
+        guard let record = records.first(where: { $0.id == id }) else { return }
+        saveTask?.cancel()
+        isLoadingRecord = true
+        currentRecordID = record.id
+        currentCreatedAt = record.createdAt
+        title = record.title
+        sourceFilename = record.sourceFilename
+        detectedLanguage = record.detectedLanguage
+        turns = record.turns
+        fallbackText = record.fallbackText
+        speakerNames = record.speakerNames
+        speakerColors = record.speakerColors
+        selectedFile = nil
+        selectedFileSize = nil
+        errorMessage = nil
+        isLoadingRecord = false
+    }
+
+    func newTranscription() {
+        saveTask?.cancel()
+        isLoadingRecord = true
+        beginNewRecord()
+        title = ""
+        selectedFile = nil
+        selectedFileSize = nil
+        errorMessage = nil
+        isLoadingRecord = false
+    }
+
+    func delete(_ id: UUID) {
+        do {
+            try store.delete(id)
+            records.removeAll { $0.id == id }
+            if currentRecordID == id { newTranscription() }
+            storeWarning = nil
+        } catch {
+            storeWarning = "Could not delete that transcript: \(error.localizedDescription)"
+        }
+    }
+
+    func saveCurrentRecord() {
+        guard hasTranscript else { return }
+        let id = currentRecordID ?? UUID()
+        currentRecordID = id
+        let record = snapshot(id: id)
+        do {
+            try store.save(record)
+            upsert(record)
+            storeWarning = nil
+        } catch {
+            storeWarning = "Could not save this transcript: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: Output
+
     func copyTranscript() {
         guard hasTranscript else { return }
         let pasteboard = NSPasteboard.general
@@ -201,7 +306,63 @@ final class TranscriberModel: ObservableObject {
         pasteboard.setString(transcriptText, forType: .string)
     }
 
+    func saveMarkdown() {
+        guard hasTranscript else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.nameFieldStringValue = snapshot(id: currentRecordID ?? UUID()).suggestedFilename + ".md"
+        panel.message = "Save the transcript as Markdown"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try Data(markdownText.utf8).write(to: url, options: .atomic)
+            storeWarning = nil
+        } catch {
+            storeWarning = "Could not write that file: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: Helpers
+
+    private func snapshot(id: UUID) -> TranscriptRecord {
+        TranscriptRecord(id: id,
+                         title: title,
+                         createdAt: currentCreatedAt,
+                         sourceFilename: sourceFilename,
+                         detectedLanguage: detectedLanguage,
+                         turns: turns,
+                         fallbackText: fallbackText,
+                         speakerNames: speakerNames,
+                         speakerColors: speakerColors)
+    }
+
+    private func upsert(_ record: TranscriptRecord) {
+        if let index = records.firstIndex(where: { $0.id == record.id }) {
+            records[index] = record
+        } else {
+            records.append(record)
+        }
+        records.sort { $0.createdAt > $1.createdAt }
+    }
+
+    /// Edits to a name, colour or title are saved on a short delay. Writing
+    /// the whole transcript on every keystroke would be a lot of file I/O on
+    /// a 2017 dual-core.
+    private func scheduleSave() {
+        guard !isLoadingRecord, hasTranscript else { return }
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.saveCurrentRecord()
+        }
+    }
+
+    private func beginNewRecord() {
+        currentRecordID = nil
+        currentCreatedAt = Date()
+        sourceFilename = ""
+        clearTranscript()
+    }
 
     private func clearTranscript() {
         turns = []
@@ -279,20 +440,87 @@ struct ContentView: View {
     private let speakerColumnWidth: CGFloat = 120
 
     var body: some View {
+        NavigationSplitView {
+            sidebar
+        } detail: {
+            main
+        }
+    }
+
+    // MARK: Sidebar
+
+    private var sidebar: some View {
+        VStack(spacing: 0) {
+            if model.records.isEmpty {
+                Spacer()
+                Text("Transcriptions you make are saved here automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding()
+                Spacer()
+            } else {
+                List(selection: Binding(get: { model.currentRecordID },
+                                        set: { if let id = $0, id != model.currentRecordID { model.open(id) } })) {
+                    ForEach(model.records) { record in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(record.displayTitle)
+                                .lineLimit(1)
+                            Text(record.createdAt, format: .dateTime.day().month().year().hour().minute())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                        .tag(record.id)
+                        .contextMenu {
+                            Button("Delete", role: .destructive) { model.delete(record.id) }
+                        }
+                    }
+                }
+                .listStyle(.sidebar)
+            }
+        }
+        .frame(minWidth: 190)
+    }
+
+    // MARK: Main
+
+    private var main: some View {
         VStack(alignment: .leading, spacing: 14) {
             settings
+            titleField
             dropZone
             controls
+            banners
             HStack(alignment: .top, spacing: 12) {
-                resultArea
+                transcriptBox
                 if !model.speakerIDs.isEmpty {
                     peoplePanel
-                        .frame(width: 210)
+                        .frame(width: 200)
                 }
             }
         }
         .padding(18)
-        .frame(minWidth: 760, minHeight: 700)
+        .frame(minWidth: 700, minHeight: 700)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    NSApp.keyWindow?.firstResponder?
+                        .tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .help("Show or hide the transcript list")
+            }
+            ToolbarItem {
+                Button {
+                    model.newTranscription()
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .help("New transcription")
+            }
+        }
     }
 
     // MARK: Settings
@@ -325,12 +553,6 @@ struct ContentView: View {
                     .buttonStyle(.borderless)
                     .help(isKeyVisible ? "Hide the key" : "Show the key")
                 }
-                if let keychainWarning = model.keychainWarning {
-                    Text(keychainWarning)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
 
             Picker("Language", selection: $model.language) {
@@ -358,12 +580,22 @@ struct ContentView: View {
         }
     }
 
+    private var titleField: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Title")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            TextField("Named after the file until you change it", text: $model.title)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
     // MARK: Drop zone
 
     private var dropZone: some View {
         VStack(spacing: 6) {
             Image(systemName: "waveform")
-                .font(.system(size: 28))
+                .font(.system(size: 26))
                 .foregroundStyle(.secondary)
             if let file = model.selectedFile {
                 Text(file.lastPathComponent)
@@ -375,6 +607,14 @@ struct ContentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            } else if !model.sourceFilename.isEmpty {
+                Text(model.sourceFilename)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                Text("Drop another file to transcribe again")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else {
                 Text("Drop an audio file here")
                     .font(.headline)
@@ -384,7 +624,7 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
+        .padding(.vertical, 20)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(isDropTargeted ? Color.accentColor.opacity(0.12) : Color.gray.opacity(0.07))
@@ -417,31 +657,33 @@ struct ContentView: View {
             .keyboardShortcut(.return, modifiers: .command)
             .disabled(!model.canTranscribe)
 
+            // Status sits beside the button rather than above the transcript,
+            // so the transcript and People boxes start at the same height.
             if model.isTranscribing {
                 ProgressView()
                     .controlSize(.small)
                 Text("Uploading and transcribing. Long recordings can take several minutes.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else if let language = model.detectedLanguage {
+                Text("Detected language: \(language)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer()
 
+            Button("Save as Markdown…") { model.saveMarkdown() }
+                .disabled(!model.hasTranscript)
             Button("Copy All") { model.copyTranscript() }
                 .disabled(!model.hasTranscript)
         }
     }
 
-    // MARK: Transcript
-
-    private var resultArea: some View {
+    private var banners: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let language = model.detectedLanguage {
-                Text("Detected language: \(language)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.callout)
@@ -449,35 +691,49 @@ struct ContentView: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let keychainWarning = model.keychainWarning {
+                Text(keychainWarning)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let storeWarning = model.storeWarning {
+                Text(storeWarning)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
 
-            ScrollView {
-                // Lazy, because a forty-minute meeting is hundreds of turns and
-                // Rosy is a dual-core Intel.
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    if model.turns.isEmpty {
-                        Text(model.fallbackText.isEmpty
-                             ? "The transcript will appear here."
-                             : model.fallbackText)
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(model.fallbackText.isEmpty ? Color.secondary : Color.primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        // Indices rather than `enumerated()`: Swift has no
-                        // key path to a tuple element, so `id: \.offset`
-                        // does not compile.
-                        ForEach(model.turns.indices, id: \.self) { index in
-                            turnRow(model.turns[index])
-                        }
+    // MARK: Transcript
+
+    private var transcriptBox: some View {
+        ScrollView {
+            // Lazy, because a forty-minute meeting is hundreds of turns and
+            // Rosy is a dual-core Intel.
+            LazyVStack(alignment: .leading, spacing: 10) {
+                if model.turns.isEmpty {
+                    Text(model.fallbackText.isEmpty
+                         ? "The transcript will appear here."
+                         : model.fallbackText)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(model.fallbackText.isEmpty ? Color.secondary : Color.primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    // Indices rather than `enumerated()`: Swift has no key
+                    // path to a tuple element, so `id: \.offset` does not
+                    // compile.
+                    ForEach(model.turns.indices, id: \.self) { index in
+                        turnRow(model.turns[index])
                     }
                 }
-                .padding(10)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07))
-            )
+            .padding(10)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
     }
 
     private func turnRow(_ turn: SpeakerTurn) -> some View {

@@ -10,7 +10,7 @@ import Foundation
 /// All eight are system colours, which adapt to light and dark automatically —
 /// this is why the palette is fixed rather than a free colour well: a free
 /// choice lets you pick something invisible against one of the two themes.
-enum SpeakerColor: Int, CaseIterable, Equatable {
+enum SpeakerColor: Int, CaseIterable, Equatable, Codable {
     case blue
     case orange
     case green
