@@ -200,12 +200,18 @@ fix for one person being split into two. **Add Speaker** in the People panel
 creates someone to assign segments to; a speaker who owns no segments can be
 removed again from their right-click menu.
 
-Reassignment never merges or deletes a segment. Adjacent segments by the same
-speaker are joined only when the transcript is rendered — the name is printed
-once and the text runs together — while the underlying segments stay separate.
-That is what makes every reassignment reversible: physically merging a moved
-segment into its neighbours would destroy the boundary and there would be no
-way to put it back.
+Reassignment never merges or deletes a segment. That is what makes it
+reversible: physically merging a moved segment into its neighbours would
+destroy the boundary and leave no way to put it back.
+
+So the window and the exported file show the same transcript differently, on
+purpose. **The window is an editor of segments**: every segment gets its own
+row with the speaker's name repeated, even where the row above has the same
+speaker, because each row is separately right-clickable and a blank name would
+both hide that and misrepresent two segments as one. **The exported file is
+for reading**: `TranscriptFormatter.merged` joins adjacent segments by the
+same speaker there, so Markdown and Copy All give one block of speech under
+one name.
 
 ## The library
 

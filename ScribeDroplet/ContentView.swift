@@ -772,12 +772,15 @@ struct ContentView: View {
 
     private func turnRow(at index: Int) -> some View {
         let turn = model.turns[index]
-        // Adjacent segments by the same speaker are one block of speech to the
-        // reader, so the name is printed only when it changes.
-        let startsSpeaker = index == 0 || model.turns[index - 1].speakerID != turn.speakerID
 
+        // The name is repeated on every segment, including where the segment
+        // above has the same speaker. This view is an editor of segments, and
+        // a blank name did two bad things: it made two segments look like one
+        // merged block, and it hid the fact that the blank space is itself
+        // right-clickable. Joining adjacent segments is an output concern, and
+        // stays in `TranscriptFormatter.merged`.
         return HStack(alignment: .top, spacing: 10) {
-            Text(startsSpeaker ? model.displayName(for: turn.speakerID) : "")
+            Text(model.displayName(for: turn.speakerID))
                 .font(.system(.body, design: .monospaced).weight(.semibold))
                 .foregroundStyle(model.color(for: turn.speakerID).color)
                 .frame(width: speakerColumnWidth, alignment: .leading)
