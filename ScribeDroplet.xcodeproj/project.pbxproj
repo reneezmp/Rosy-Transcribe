@@ -1,0 +1,384 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1B0000000000000000000001 /* ScribeDropletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000001 /* ScribeDropletApp.swift */; };
+		1B0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000002 /* ContentView.swift */; };
+		1B0000000000000000000003 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000003 /* TranscriptionService.swift */; };
+		1B0000000000000000000004 /* MultipartBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000004 /* MultipartBuilder.swift */; };
+		1B0000000000000000000005 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000005 /* Models.swift */; };
+		1B0000000000000000000006 /* TranscriptFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000006 /* TranscriptFormatter.swift */; };
+		1B0000000000000000000007 /* MultipartBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000007 /* MultipartBuilderTests.swift */; };
+		1B0000000000000000000008 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000008 /* TranscriptFormatterTests.swift */; };
+		1B0000000000000000000009 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000005 /* Models.swift */; };
+		1B000000000000000000000A /* MultipartBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000004 /* MultipartBuilder.swift */; };
+		1B000000000000000000000B /* TranscriptFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000006 /* TranscriptFormatter.swift */; };
+		1B000000000000000000000C /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000003 /* TranscriptionService.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1A0000000000000000000001 /* ScribeDropletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScribeDropletApp.swift; sourceTree = "<group>"; };
+		1A0000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000003 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000004 /* MultipartBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultipartBuilder.swift; sourceTree = "<group>"; };
+		1A0000000000000000000005 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		1A0000000000000000000006 /* TranscriptFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptFormatter.swift; sourceTree = "<group>"; };
+		1A0000000000000000000007 /* MultipartBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultipartBuilderTests.swift; sourceTree = "<group>"; };
+		1A0000000000000000000008 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
+		1A0000000000000000000009 /* ScribeDroplet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScribeDroplet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A000000000000000000000A /* ScribeDropletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScribeDropletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1D0000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1D0000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1C0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				1C0000000000000000000002 /* ScribeDroplet */,
+				1C0000000000000000000003 /* ScribeDropletTests */,
+				1C0000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		1C0000000000000000000002 /* ScribeDroplet */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000001 /* ScribeDropletApp.swift */,
+				1A0000000000000000000002 /* ContentView.swift */,
+				1A0000000000000000000003 /* TranscriptionService.swift */,
+				1A0000000000000000000004 /* MultipartBuilder.swift */,
+				1A0000000000000000000005 /* Models.swift */,
+				1A0000000000000000000006 /* TranscriptFormatter.swift */,
+			);
+			path = ScribeDroplet;
+			sourceTree = "<group>";
+		};
+		1C0000000000000000000003 /* ScribeDropletTests */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000007 /* MultipartBuilderTests.swift */,
+				1A0000000000000000000008 /* TranscriptFormatterTests.swift */,
+			);
+			path = ScribeDropletTests;
+			sourceTree = "<group>";
+		};
+		1C0000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000009 /* ScribeDroplet.app */,
+				1A000000000000000000000A /* ScribeDropletTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1E0000000000000000000001 /* ScribeDroplet */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 200000000000000000000002 /* Build configuration list for PBXNativeTarget "ScribeDroplet" */;
+			buildPhases = (
+				1D0000000000000000000001 /* Sources */,
+				1D0000000000000000000002 /* Frameworks */,
+				1D0000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ScribeDroplet;
+			productName = ScribeDroplet;
+			productReference = 1A0000000000000000000009 /* ScribeDroplet.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1E0000000000000000000002 /* ScribeDropletTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 200000000000000000000003 /* Build configuration list for PBXNativeTarget "ScribeDropletTests" */;
+			buildPhases = (
+				1D0000000000000000000004 /* Sources */,
+				1D0000000000000000000005 /* Frameworks */,
+				1D0000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ScribeDropletTests;
+			productName = ScribeDropletTests;
+			productReference = 1A000000000000000000000A /* ScribeDropletTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1F0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					1E0000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					1E0000000000000000000002 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 200000000000000000000001 /* Build configuration list for PBXProject "ScribeDroplet" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1C0000000000000000000001;
+			productRefGroup = 1C0000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1E0000000000000000000001 /* ScribeDroplet */,
+				1E0000000000000000000002 /* ScribeDropletTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1D0000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1D0000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1D0000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1B0000000000000000000002 /* ContentView.swift in Sources */,
+				1B0000000000000000000005 /* Models.swift in Sources */,
+				1B0000000000000000000004 /* MultipartBuilder.swift in Sources */,
+				1B0000000000000000000001 /* ScribeDropletApp.swift in Sources */,
+				1B0000000000000000000006 /* TranscriptFormatter.swift in Sources */,
+				1B0000000000000000000003 /* TranscriptionService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1D0000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1B0000000000000000000007 /* MultipartBuilderTests.swift in Sources */,
+				1B0000000000000000000008 /* TranscriptFormatterTests.swift in Sources */,
+				1B0000000000000000000009 /* Models.swift in Sources */,
+				1B000000000000000000000A /* MultipartBuilder.swift in Sources */,
+				1B000000000000000000000B /* TranscriptFormatter.swift in Sources */,
+				1B000000000000000000000C /* TranscriptionService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		210000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "arm64 x86_64";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		210000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "arm64 x86_64";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				ONLY_ACTIVE_ARCH = NO;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		210000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Scribe Droplet";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDroplet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		210000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Scribe Droplet";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDroplet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+		210000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDropletTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+			};
+			name = Debug;
+		};
+		210000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDropletTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		200000000000000000000001 /* Build configuration list for PBXProject "ScribeDroplet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				210000000000000000000001 /* Debug */,
+				210000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		200000000000000000000002 /* Build configuration list for PBXNativeTarget "ScribeDroplet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				210000000000000000000003 /* Debug */,
+				210000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		200000000000000000000003 /* Build configuration list for PBXNativeTarget "ScribeDropletTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				210000000000000000000005 /* Debug */,
+				210000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1F0000000000000000000001 /* Project object */;
+}
