@@ -77,8 +77,16 @@ model_id                scribe_v2
 diarize                 true
 timestamps_granularity  word
 language_code           por | eng | spa   (omitted entirely for auto-detect)
-keyterms                ["proferida","averbação"]   (omitted when empty)
+keyterms                one part per term, repeating the field name
+                        (omitted entirely when the glossary is empty)
 ```
+
+An array parameter goes over multipart as the **same field name repeated**,
+one part per value — not as a JSON array in a single part. Sending
+`["proferida","averbação",...]` as one field made the server measure the whole
+85-character array as a single keyword and reject the request with
+`All keywords must be less than 50 characters`. `MultipartField` exists
+precisely because a `[String: String]` cannot express a repeated name.
 
 The response carries `text`, `language_code`, `language_probability`,
 `audio_duration_secs`, and `words[]`. Each word has `text`, `start`, `end`,
@@ -151,8 +159,12 @@ but it comes back as *preferida*, preferred, which is a real word in a
 plausible place and therefore easy to miss when proofreading.
 
 Type them separated by commas or newlines. Limits are enforced before the
-upload starts rather than after: at most 100 terms, each at most 50 characters
-and 5 words.
+upload starts rather than after: at most 100 terms, each **under** 50
+characters and at most 5 words.
+
+The docs say "≤50 chars", but the server rejects with "All keywords must be
+less than 50 characters", so the limit is exclusive. Where the two disagree,
+the API wins.
 
 ## Not in v1 or v2, deliberately
 

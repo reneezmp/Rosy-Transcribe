@@ -116,6 +116,41 @@ final class MultipartBuilderTests: XCTestCase {
         XCTAssertNotEqual(MultipartBuilder.randomBoundary(), MultipartBuilder.randomBoundary())
     }
 
+    // MARK: - Repeated fields
+
+    /// An array parameter arrives as the same name repeated, one part per
+    /// value. A dictionary cannot express that, which is why fields are an
+    /// ordered list.
+    func testRepeatedFieldNamesProduceSeparateParts() throws {
+        let body = MultipartBuilder(boundary: boundary).body(
+            fields: [MultipartField("keyterms", "proferida"),
+                     MultipartField("keyterms", "averbação")],
+            fileFieldName: "file",
+            fileName: "a.mp3",
+            fileMIMEType: "audio/mpeg",
+            fileData: Data("AUDIO".utf8))
+        let text = try XCTUnwrap(String(data: body, encoding: .utf8))
+
+        XCTAssertEqual(text.components(separatedBy: "name=\"keyterms\"").count - 1, 2)
+        XCTAssertTrue(text.contains("name=\"keyterms\"\r\n\r\nproferida\r\n"))
+        XCTAssertTrue(text.contains("name=\"keyterms\"\r\n\r\naverbação\r\n"))
+    }
+
+    func testOrderedFieldsAreEmittedInTheGivenOrder() throws {
+        let body = MultipartBuilder(boundary: boundary).body(
+            fields: [MultipartField("zebra", "1"), MultipartField("alpha", "2")],
+            fileFieldName: "file",
+            fileName: "a.mp3",
+            fileMIMEType: "audio/mpeg",
+            fileData: Data("AUDIO".utf8))
+        let text = try XCTUnwrap(String(data: body, encoding: .utf8))
+        let zebra = try XCTUnwrap(text.range(of: "name=\"zebra\""))
+        let alpha = try XCTUnwrap(text.range(of: "name=\"alpha\""))
+        XCTAssertTrue(zebra.lowerBound < alpha.lowerBound, "given order must be preserved")
+    }
+
+    // MARK: - MIME types
+
     func testMIMETypeLookup() {
         XCTAssertEqual(MultipartBuilder.mimeType(forPathExtension: "mp3"), "audio/mpeg")
         XCTAssertEqual(MultipartBuilder.mimeType(forPathExtension: "M4A"), "audio/mp4")
@@ -131,7 +166,7 @@ final class MultipartBuilderTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let body = try MultipartBuilder(boundary: boundary)
-            .body(fields: ["model_id": "scribe_v2"], fileFieldName: "file", fileURL: url)
+            .body(fields: [MultipartField("model_id", "scribe_v2")], fileFieldName: "file", fileURL: url)
         let text = try XCTUnwrap(String(data: body, encoding: .isoLatin1))
 
         XCTAssertTrue(text.contains("Content-Type: audio/wav"))

@@ -8,10 +8,14 @@ import Foundation
 /// UI or networking types, so the limits are testable without the API.
 enum Keyterms {
 
-    /// Documented limits, enforced here so a mistake surfaces instantly with a
-    /// clear message rather than as a 422 after the upload has finished.
+    /// Limits, enforced here so a mistake surfaces instantly with a clear
+    /// message rather than as a 400 after the upload has finished.
+    ///
+    /// The character limit is *exclusive*. The docs say "≤50 chars", but the
+    /// server's own rejection says "All keywords must be less than 50
+    /// characters", and the API wins over the documentation.
     static let maxCount = 100
-    static let maxCharacters = 50
+    static let characterLimit = 50
     static let maxWords = 5
 
     /// Splits on commas and newlines, trims each term, drops blanks, and
@@ -33,7 +37,7 @@ enum Keyterms {
             throw KeytermsError.tooMany(count: terms.count)
         }
         for term in terms {
-            guard term.count <= maxCharacters else {
+            guard term.count < characterLimit else {
                 throw KeytermsError.termTooLong(term: term)
             }
             guard wordCount(term) <= maxWords else {
@@ -46,13 +50,6 @@ enum Keyterms {
         let terms = parse(raw)
         try validate(terms)
         return terms
-    }
-
-    /// The API takes an array. Multipart form fields are strings, so the terms
-    /// go over the wire as a JSON array.
-    static func formFieldValue(_ terms: [String]) -> String? {
-        guard !terms.isEmpty, let data = try? JSONEncoder().encode(terms) else { return nil }
-        return String(data: data, encoding: .utf8)
     }
 
     private static func wordCount(_ term: String) -> Int {
@@ -70,7 +67,7 @@ enum KeytermsError: LocalizedError, Equatable {
         case .tooMany(let count):
             return "\(count) key terms — the API accepts at most \(Keyterms.maxCount). Remove \(count - Keyterms.maxCount)."
         case .termTooLong(let term):
-            return "\"\(term)\" is \(term.count) characters long. Key terms are limited to \(Keyterms.maxCharacters)."
+            return "\"\(term)\" is \(term.count) characters long. Key terms must be under \(Keyterms.characterLimit) characters."
         case .termHasTooManyWords(let term):
             return "\"\(term)\" has more than \(Keyterms.maxWords) words. Key terms are limited to \(Keyterms.maxWords) words each."
         }

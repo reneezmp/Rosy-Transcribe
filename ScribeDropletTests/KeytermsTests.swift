@@ -47,13 +47,15 @@ final class KeytermsTests: XCTestCase {
         }
     }
 
-    func testTermLengthLimitIsFiftyCharacters() {
-        let fifty = String(repeating: "a", count: 50)
-        XCTAssertNoThrow(try Keyterms.validate([fifty]))
+    /// The server rejects with "All keywords must be less than 50 characters",
+    /// so 50 itself is too long even though the docs say "≤50".
+    func testTermLengthLimitIsUnderFiftyCharacters() {
+        let fortyNine = String(repeating: "a", count: 49)
+        XCTAssertNoThrow(try Keyterms.validate([fortyNine]))
 
-        let fiftyOne = String(repeating: "a", count: 51)
-        XCTAssertThrowsError(try Keyterms.validate([fiftyOne])) { error in
-            XCTAssertEqual(error as? KeytermsError, .termTooLong(term: fiftyOne))
+        let fifty = String(repeating: "a", count: 50)
+        XCTAssertThrowsError(try Keyterms.validate([fifty])) { error in
+            XCTAssertEqual(error as? KeytermsError, .termTooLong(term: fifty))
         }
     }
 
@@ -68,8 +70,8 @@ final class KeytermsTests: XCTestCase {
 
     /// Accented characters are one character each, not one per byte.
     func testLengthIsCountedInCharactersNotBytes() {
-        let fifty = String(repeating: "ç", count: 50)
-        XCTAssertNoThrow(try Keyterms.validate([fifty]))
+        let fortyNine = String(repeating: "ç", count: 49)
+        XCTAssertNoThrow(try Keyterms.validate([fortyNine]))
     }
 
     func testEveryLimitMessageNamesTheOffendingTerm() {
@@ -83,45 +85,56 @@ final class KeytermsTests: XCTestCase {
         XCTAssertThrowsError(try Keyterms.validated(String(repeating: "a", count: 51)))
     }
 
-    // MARK: - Wire format
+    // MARK: - Request shape
 
-    func testNoTermsMeansNoParameterAtAll() {
-        // Sending an empty array is not the same as sending nothing.
-        XCTAssertNil(Keyterms.formFieldValue([]))
+    /// Regression. The glossary first went out as a JSON array in a single
+    /// part; the server measured that whole 85-character array as one keyword
+    /// and rejected the request with "All keywords must be less than 50
+    /// characters". An array parameter over multipart is the same name
+    /// repeated, one part per term.
+    func testKeytermsAreRepeatedPartsRatherThanAJSONArray() throws {
+        let terms = try Keyterms.validated("proferida, averbação, Dr. Christopher")
+        let fields = TranscriptionService.formFields(languageCode: "por", keyterms: terms)
+
+        XCTAssertEqual(fields.filter { $0.name == "keyterms" },
+                       [MultipartField("keyterms", "proferida"),
+                        MultipartField("keyterms", "averbação"),
+                        MultipartField("keyterms", "Dr. Christopher")])
     }
 
-    func testTermsAreEncodedAsAJSONArray() {
-        XCTAssertEqual(Keyterms.formFieldValue(["proferida", "averbação"]),
-                       #"["proferida","averbação"]"#)
-    }
-
-    func testJSONEncodingSurvivesQuotesAndBackslashes() throws {
-        let value = try XCTUnwrap(Keyterms.formFieldValue([#"a "quoted" term"#]))
-        let decoded = try JSONDecoder().decode([String].self, from: Data(value.utf8))
-        XCTAssertEqual(decoded, [#"a "quoted" term"#])
-    }
-
-    func testAccentedTermsRoundTripThroughJSON() throws {
-        let terms = ["averbação", "ineficácia relativa", "João"]
-        let value = try XCTUnwrap(Keyterms.formFieldValue(terms))
-        XCTAssertEqual(try JSONDecoder().decode([String].self, from: Data(value.utf8)), terms)
-    }
-
-    /// The end-to-end shape: a glossary must arrive as one well-formed form
-    /// field, with its JSON and its accents intact after multipart encoding.
-    func testKeytermsSurviveTheMultipartEnvelope() throws {
-        let terms = try Keyterms.validated("proferida, averbação, embargos de terceiros")
-        var fields = ["model_id": "scribe_v2", "diarize": "true"]
-        fields["keyterms"] = try XCTUnwrap(Keyterms.formFieldValue(terms))
-
-        let body = MultipartBuilder(boundary: "B").body(fields: fields,
-                                                        fileFieldName: "file",
-                                                        fileName: "a.mp3",
-                                                        fileMIMEType: "audio/mpeg",
-                                                        fileData: Data("AUDIO".utf8))
+    func testKeytermsReachTheEnvelopeAsOneBarePartPerTerm() throws {
+        let terms = try Keyterms.validated("proferida, averbação, Dr. Christopher")
+        let body = MultipartBuilder(boundary: "B").body(
+            fields: TranscriptionService.formFields(languageCode: "por", keyterms: terms),
+            fileFieldName: "file",
+            fileName: "a.mp3",
+            fileMIMEType: "audio/mpeg",
+            fileData: Data("AUDIO".utf8))
         let text = try XCTUnwrap(String(data: body, encoding: .utf8))
 
-        XCTAssertTrue(text.contains("Content-Disposition: form-data; name=\"keyterms\"\r\n\r\n"
-                                    + #"["proferida","averbação","embargos de terceiros"]"# + "\r\n"))
+        XCTAssertEqual(text.components(separatedBy: "name=\"keyterms\"").count - 1, 3)
+        for term in terms {
+            XCTAssertTrue(text.contains("name=\"keyterms\"\r\n\r\n\(term)\r\n"),
+                          "expected a bare part for \(term)")
+        }
+        XCTAssertFalse(text.contains("["), "no JSON array should appear anywhere in the body")
+    }
+
+    func testEmptyGlossarySendsNoKeytermsFieldAtAll() {
+        let fields = TranscriptionService.formFields(languageCode: "por", keyterms: [])
+        XCTAssertFalse(fields.contains { $0.name == "keyterms" })
+    }
+
+    func testAutoDetectSendsNoLanguageCodeField() {
+        let fields = TranscriptionService.formFields(languageCode: nil, keyterms: [])
+        XCTAssertFalse(fields.contains { $0.name == "language_code" })
+    }
+
+    func testTheConstantFieldsAreAlwaysPresent() {
+        let fields = TranscriptionService.formFields(languageCode: "por", keyterms: ["a"])
+        XCTAssertEqual(fields.first, MultipartField("model_id", "scribe_v2"))
+        XCTAssertTrue(fields.contains(MultipartField("diarize", "true")))
+        XCTAssertTrue(fields.contains(MultipartField("timestamps_granularity", "word")))
+        XCTAssertTrue(fields.contains(MultipartField("language_code", "por")))
     }
 }

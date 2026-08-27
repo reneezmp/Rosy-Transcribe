@@ -1,5 +1,20 @@
 import Foundation
 
+/// One `form-data` part carrying a plain string.
+///
+/// A dictionary cannot express an array field, because an array arrives as the
+/// *same name repeated* — `keyterms` once per term. That is why fields are an
+/// ordered list of these rather than `[String: String]`.
+struct MultipartField: Equatable {
+    let name: String
+    let value: String
+
+    init(_ name: String, _ value: String) {
+        self.name = name
+        self.value = value
+    }
+}
+
 /// Hand-assembles a `multipart/form-data` body.
 ///
 /// URLSession has no built-in encoder for this, and the ways to get it wrong
@@ -9,7 +24,7 @@ import Foundation
 /// - every line terminator in the envelope is CRLF, never a bare LF
 /// - each part opens with `--<boundary>`
 /// - the final boundary is `--<boundary>--`
-/// - every part carries a `Content-Disposition: form-data; name="..."` header
+/// - every part carries a `Content-Disposition: form-data; name="..."` line
 /// - the file part additionally carries `filename="..."` and `Content-Type`
 /// - one blank line separates a part's headers from its content
 ///
@@ -32,22 +47,22 @@ struct MultipartBuilder {
         "multipart/form-data; boundary=\(boundary)"
     }
 
-    /// Encodes plain string fields plus one file part.
+    /// Encodes string fields plus one file part.
     ///
-    /// Fields are emitted in sorted key order. Order is irrelevant to the
-    /// server, but a deterministic body is far easier to test.
-    func body(fields: [String: String],
+    /// Fields are emitted in the order given, and a name may appear more than
+    /// once — that is how an array-valued parameter is expressed.
+    func body(fields: [MultipartField],
               fileFieldName: String,
               fileName: String,
               fileMIMEType: String,
               fileData: Data) -> Data {
         var body = Data()
 
-        for name in fields.keys.sorted() {
+        for field in fields {
             body.append(Self.bytes("--\(boundary)\(Self.crlf)"))
-            body.append(Self.bytes("Content-Disposition: form-data; name=\"\(Self.escapeHeaderValue(name))\"\(Self.crlf)"))
+            body.append(Self.bytes("Content-Disposition: form-data; name=\"\(Self.escapeHeaderValue(field.name))\"\(Self.crlf)"))
             body.append(Self.bytes(Self.crlf))
-            body.append(Self.bytes(fields[name] ?? ""))
+            body.append(Self.bytes(field.value))
             body.append(Self.bytes(Self.crlf))
         }
 
@@ -62,6 +77,21 @@ struct MultipartBuilder {
         return body
     }
 
+    /// Convenience for the simple case of distinct, single-valued fields.
+    /// Emitted in sorted key order, because a deterministic body is far easier
+    /// to test and the order is irrelevant to the server.
+    func body(fields: [String: String],
+              fileFieldName: String,
+              fileName: String,
+              fileMIMEType: String,
+              fileData: Data) -> Data {
+        body(fields: fields.keys.sorted().map { MultipartField($0, fields[$0] ?? "") },
+             fileFieldName: fileFieldName,
+             fileName: fileName,
+             fileMIMEType: fileMIMEType,
+             fileData: fileData)
+    }
+
     /// Convenience wrapper that reads the file and derives its MIME type.
     ///
     /// `Data(contentsOf:)` holds the whole file in memory. That is fine for the
@@ -69,7 +99,7 @@ struct MultipartBuilder {
     /// and it keeps the encoder a pure function of its inputs. If memory
     /// pressure ever shows up on the Intel machine, the change is to spool the
     /// envelope to a temp file and use `uploadTask(with:fromFile:)` instead.
-    func body(fields: [String: String],
+    func body(fields: [MultipartField],
               fileFieldName: String,
               fileURL: URL) throws -> Data {
         let fileData = try Data(contentsOf: fileURL)

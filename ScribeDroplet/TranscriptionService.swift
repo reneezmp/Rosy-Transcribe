@@ -162,23 +162,9 @@ struct TranscriptionService {
 
         let fileData = try Self.readFile(at: request.fileURL)
 
-        var fields: [String: String] = [
-            "model_id": Self.modelID,
-            "diarize": "true",
-            "timestamps_granularity": "word",
-        ]
-        // Omitted entirely for auto-detect: sending an empty string is not the
-        // same thing as sending nothing.
-        if let languageCode = request.languageCode {
-            fields["language_code"] = languageCode
-        }
-        // Likewise: no glossary means no parameter, not an empty array.
-        if let keyterms = Keyterms.formFieldValue(request.keyterms) {
-            fields["keyterms"] = keyterms
-        }
-
         let builder = MultipartBuilder(boundary: boundaryProvider())
-        let body = builder.body(fields: fields,
+        let body = builder.body(fields: Self.formFields(languageCode: request.languageCode,
+                                                        keyterms: request.keyterms),
                                 fileFieldName: "file",
                                 fileName: request.fileURL.lastPathComponent,
                                 fileMIMEType: MultipartBuilder.mimeType(forPathExtension: request.fileURL.pathExtension),
@@ -209,6 +195,32 @@ struct TranscriptionService {
         } catch {
             throw TranscriptionError.undecodableResponse(error.localizedDescription)
         }
+    }
+
+    /// The form fields for one request, in the order they go on the wire.
+    ///
+    /// Split out from `transcribe` so the exact shape of the request can be
+    /// asserted in tests without touching the network — this is where the
+    /// keyterms format went wrong once already.
+    static func formFields(languageCode: String?, keyterms: [String]) -> [MultipartField] {
+        var fields = [
+            MultipartField("model_id", modelID),
+            MultipartField("diarize", "true"),
+            MultipartField("timestamps_granularity", "word"),
+        ]
+        // Omitted entirely for auto-detect: sending an empty string is not the
+        // same thing as sending nothing.
+        if let languageCode {
+            fields.append(MultipartField("language_code", languageCode))
+        }
+        // An array parameter over multipart is the same name repeated, one
+        // part per term. Sending them as a JSON array in a single part made
+        // the server measure the whole array as one keyword and reject it
+        // with "All keywords must be less than 50 characters".
+        for term in keyterms {
+            fields.append(MultipartField("keyterms", term))
+        }
+        return fields
     }
 
     // MARK: - Reading the file
