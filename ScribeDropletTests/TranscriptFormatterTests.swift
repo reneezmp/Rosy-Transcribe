@@ -334,3 +334,115 @@ final class SpeakerColorTests: XCTestCase {
         XCTAssertTrue(SpeakerColor.assign(to: []).isEmpty)
     }
 }
+
+// MARK: - Reassigning speakers
+
+final class SpeakerEditorTests: XCTestCase {
+
+    private func turn(_ text: String, _ speaker: String?) -> SpeakerTurn {
+        SpeakerTurn(speakerID: speaker, text: text)
+    }
+
+    private var sample: [SpeakerTurn] {
+        [turn("um", "speaker_0"), turn("dois", "speaker_1"), turn("três", "speaker_0")]
+    }
+
+    func testAssigningMovesOnlyTheChosenSegment() {
+        let edited = SpeakerEditor.assigning(sample, at: 1, to: "speaker_0")
+        XCTAssertEqual(edited.map(\.speakerID), ["speaker_0", "speaker_0", "speaker_0"])
+        XCTAssertEqual(edited.map(\.text), ["um", "dois", "três"])
+    }
+
+    func testAssigningOutOfRangeChangesNothing() {
+        XCTAssertEqual(SpeakerEditor.assigning(sample, at: 99, to: "speaker_1"), sample)
+        XCTAssertEqual(SpeakerEditor.assigning(sample, at: -1, to: "speaker_1"), sample)
+    }
+
+    func testReassigningAllMovesEverySegmentOfOneSpeaker() {
+        let edited = SpeakerEditor.reassigningAll(sample, from: "speaker_0", to: "speaker_1")
+        XCTAssertEqual(edited.map(\.speakerID), ["speaker_1", "speaker_1", "speaker_1"])
+    }
+
+    func testReassigningAllLeavesOtherSpeakersAlone() {
+        let edited = SpeakerEditor.reassigningAll(sample, from: "speaker_1", to: "speaker_0")
+        XCTAssertEqual(edited.map(\.speakerID), ["speaker_0", "speaker_0", "speaker_0"])
+        XCTAssertEqual(SpeakerEditor.reassigningAll(sample, from: "nobody", to: "speaker_0"), sample)
+    }
+
+    func testReassigningAllCanCollectUndiarizedSegments() {
+        let turns = [turn("um", nil), turn("dois", "speaker_0")]
+        let edited = SpeakerEditor.reassigningAll(turns, from: nil, to: "speaker_0")
+        XCTAssertEqual(edited.map(\.speakerID), ["speaker_0", "speaker_0"])
+    }
+
+    func testNextSpeakerIDFollowsTheAPINumbering() {
+        XCTAssertEqual(SpeakerEditor.nextSpeakerID(notIn: []), "speaker_0")
+        XCTAssertEqual(SpeakerEditor.nextSpeakerID(notIn: ["speaker_0", "speaker_1"]), "speaker_2")
+    }
+
+    func testNextSpeakerIDFillsAGapRatherThanColliding() {
+        XCTAssertEqual(SpeakerEditor.nextSpeakerID(notIn: ["speaker_1", "speaker_2"]), "speaker_0")
+        XCTAssertEqual(SpeakerEditor.nextSpeakerID(notIn: ["speaker_0", "speaker_2"]), "speaker_1")
+    }
+
+    func testSegmentCountDecidesWhetherASpeakerCanBeRemoved() {
+        XCTAssertEqual(SpeakerEditor.segmentCount(for: "speaker_0", in: sample), 2)
+        XCTAssertEqual(SpeakerEditor.segmentCount(for: "speaker_9", in: sample), 0)
+    }
+}
+
+// MARK: - Merging for output
+
+final class TurnMergingTests: XCTestCase {
+
+    private func turn(_ text: String, _ speaker: String?) -> SpeakerTurn {
+        SpeakerTurn(speakerID: speaker, text: text)
+    }
+
+    func testAlternatingSpeakersAreLeftAlone() {
+        let turns = [turn("um", "speaker_0"), turn("dois", "speaker_1")]
+        XCTAssertEqual(TranscriptFormatter.merged(turns), turns)
+    }
+
+    func testAdjacentSegmentsBySameSpeakerAreJoined() {
+        let turns = [turn("um", "speaker_0"), turn("dois", "speaker_0"), turn("três", "speaker_1")]
+        XCTAssertEqual(TranscriptFormatter.merged(turns),
+                       [turn("um dois", "speaker_0"), turn("três", "speaker_1")])
+    }
+
+    func testAWholeRunIsJoinedIntoOne() {
+        let turns = [turn("um", "speaker_0"), turn("dois", "speaker_0"), turn("três", "speaker_0")]
+        XCTAssertEqual(TranscriptFormatter.merged(turns), [turn("um dois três", "speaker_0")])
+    }
+
+    func testEmptyInputMergesToNothing() {
+        XCTAssertEqual(TranscriptFormatter.merged([]), [])
+    }
+
+    /// The point of merging on output only: after reassigning the middle
+    /// segment the reader sees one block, but the three segments are still
+    /// there, so the edit can be undone by reassigning it back.
+    func testReassignmentReadsAsOneBlockButStaysReversible() {
+        let original = [turn("um", "speaker_0"), turn("dois", "speaker_1"), turn("três", "speaker_0")]
+        let names = ["speaker_0": "Lilian", "speaker_1": "João"]
+
+        let edited = SpeakerEditor.assigning(original, at: 1, to: "speaker_0")
+        XCTAssertEqual(edited.count, 3, "segments must survive the reassignment")
+        XCTAssertEqual(TranscriptFormatter.format(turns: edited, names: names, fallbackText: ""),
+                       "Lilian:\num dois três")
+
+        let undone = SpeakerEditor.assigning(edited, at: 1, to: "speaker_1")
+        XCTAssertEqual(undone, original)
+        XCTAssertEqual(TranscriptFormatter.format(turns: undone, names: names, fallbackText: ""),
+                       "Lilian:\num\n\nJoão:\ndois\n\nLilian:\ntrês")
+    }
+
+    func testMarkdownAlsoMergesAdjacentSegments() {
+        let turns = [turn("um", "speaker_0"), turn("dois", "speaker_0")]
+        XCTAssertEqual(TranscriptFormatter.markdown(title: "",
+                                                    turns: turns,
+                                                    names: ["speaker_0": "Lilian"],
+                                                    fallbackText: ""),
+                       "**Lilian**\num dois\n")
+    }
+}

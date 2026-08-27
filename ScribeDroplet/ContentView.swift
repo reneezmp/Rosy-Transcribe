@@ -62,6 +62,12 @@ final class TranscriberModel: ObservableObject {
     @Published var speakerColors: [String: SpeakerColor] = [:] {
         didSet { scheduleSave() }
     }
+    /// Every speaker in this transcript, in order of first appearance, plus
+    /// any added by hand. Held explicitly rather than derived from the turns,
+    /// because an added speaker owns no segments until one is assigned.
+    @Published var speakerOrder: [String] = [] {
+        didSet { scheduleSave() }
+    }
 
     // MARK: The library
 
@@ -110,12 +116,6 @@ final class TranscriberModel: ObservableObject {
 
     var hasTranscript: Bool {
         !turns.isEmpty || !fallbackText.isEmpty
-    }
-
-    /// The speakers found, in order of first appearance — the order the People
-    /// panel lists them in and the order colours were handed out in.
-    var speakerIDs: [String] {
-        TranscriptFormatter.speakerIDs(in: turns)
     }
 
     /// The transcript as plain text, for the pasteboard.
@@ -221,7 +221,8 @@ final class TranscriberModel: ObservableObject {
             isLoadingRecord = true
             turns = TranscriptFormatter.turns(from: response.words ?? [])
             fallbackText = response.text
-            speakerColors = SpeakerColor.assign(to: speakerIDs)
+            speakerOrder = TranscriptFormatter.speakerIDs(in: turns)
+            speakerColors = SpeakerColor.assign(to: speakerOrder)
             detectedLanguage = Self.describeLanguage(response)
             sourceFilename = fileURL.lastPathComponent
             isLoadingRecord = false
@@ -255,6 +256,7 @@ final class TranscriberModel: ObservableObject {
         fallbackText = record.fallbackText
         speakerNames = record.speakerNames
         speakerColors = record.speakerColors
+        speakerOrder = record.speakers
         selectedFile = nil
         selectedFileSize = nil
         errorMessage = nil
@@ -297,6 +299,37 @@ final class TranscriberModel: ObservableObject {
         }
     }
 
+    // MARK: Editing speakers
+
+    func assign(turnAt index: Int, to speakerID: String) {
+        turns = SpeakerEditor.assigning(turns, at: index, to: speakerID)
+        scheduleSave()
+    }
+
+    func reassignAll(from source: String?, to destination: String) {
+        turns = SpeakerEditor.reassigningAll(turns, from: source, to: destination)
+        scheduleSave()
+    }
+
+    func addSpeaker() {
+        let id = SpeakerEditor.nextSpeakerID(notIn: speakerOrder)
+        speakerColors[id] = SpeakerColor.forSpeaker(atIndex: speakerOrder.count)
+        speakerOrder.append(id)
+    }
+
+    /// Only a speaker with nothing attributed to them can be removed —
+    /// otherwise their segments would be orphaned.
+    func canRemoveSpeaker(_ speakerID: String) -> Bool {
+        SpeakerEditor.segmentCount(for: speakerID, in: turns) == 0
+    }
+
+    func removeSpeaker(_ speakerID: String) {
+        guard canRemoveSpeaker(speakerID) else { return }
+        speakerOrder.removeAll { $0 == speakerID }
+        speakerNames[speakerID] = nil
+        speakerColors[speakerID] = nil
+    }
+
     // MARK: Output
 
     func copyTranscript() {
@@ -332,7 +365,8 @@ final class TranscriberModel: ObservableObject {
                          turns: turns,
                          fallbackText: fallbackText,
                          speakerNames: speakerNames,
-                         speakerColors: speakerColors)
+                         speakerColors: speakerColors,
+                         speakerOrder: speakerOrder)
     }
 
     private func upsert(_ record: TranscriptRecord) {
@@ -369,6 +403,7 @@ final class TranscriberModel: ObservableObject {
         fallbackText = ""
         speakerNames = [:]
         speakerColors = [:]
+        speakerOrder = []
         detectedLanguage = nil
     }
 
@@ -487,14 +522,21 @@ struct ContentView: View {
 
     private var main: some View {
         VStack(alignment: .leading, spacing: 14) {
-            settings
-            titleField
-            dropZone
+            // The drop zone sits beside the fields rather than below them, so
+            // the transcript gets the vertical space instead.
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
+                    settings
+                    titleField
+                }
+                dropZone
+                    .frame(width: 200, height: 200)
+            }
             controls
             banners
             HStack(alignment: .top, spacing: 12) {
                 transcriptBox
-                if !model.speakerIDs.isEmpty {
+                if !model.speakerOrder.isEmpty {
                     peoplePanel
                         .frame(width: 200)
                 }
@@ -502,16 +544,9 @@ struct ContentView: View {
         }
         .padding(18)
         .frame(minWidth: 700, minHeight: 700)
+        // NavigationSplitView provides its own sidebar toggle; adding one
+        // here produced two.
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    NSApp.keyWindow?.firstResponder?
-                        .tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
-                } label: {
-                    Image(systemName: "sidebar.left")
-                }
-                .help("Show or hide the transcript list")
-            }
             ToolbarItem {
                 Button {
                     model.newTranscription()
@@ -623,8 +658,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(isDropTargeted ? Color.accentColor.opacity(0.12) : Color.gray.opacity(0.07))
@@ -726,7 +760,7 @@ struct ContentView: View {
                     // path to a tuple element, so `id: \.offset` does not
                     // compile.
                     ForEach(model.turns.indices, id: \.self) { index in
-                        turnRow(model.turns[index])
+                        turnRow(at: index)
                     }
                 }
             }
@@ -736,18 +770,55 @@ struct ContentView: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
     }
 
-    private func turnRow(_ turn: SpeakerTurn) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(model.displayName(for: turn.speakerID))
+    private func turnRow(at index: Int) -> some View {
+        let turn = model.turns[index]
+        // Adjacent segments by the same speaker are one block of speech to the
+        // reader, so the name is printed only when it changes.
+        let startsSpeaker = index == 0 || model.turns[index - 1].speakerID != turn.speakerID
+
+        return HStack(alignment: .top, spacing: 10) {
+            Text(startsSpeaker ? model.displayName(for: turn.speakerID) : "")
                 .font(.system(.body, design: .monospaced).weight(.semibold))
                 .foregroundStyle(model.color(for: turn.speakerID).color)
                 .frame(width: speakerColumnWidth, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
+                // The whole column is the target, so a continuation row can be
+                // right-clicked too.
+                .contentShape(Rectangle())
+                .contextMenu { reassignmentMenu(for: index) }
             Text(turn.text)
                 .font(.system(.body, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private func reassignmentMenu(for index: Int) -> some View {
+        let current = model.turns[index].speakerID
+
+        ForEach(model.speakerOrder, id: \.self) { id in
+            Button {
+                model.assign(turnAt: index, to: id)
+            } label: {
+                if id == current {
+                    Label(model.displayName(for: id), systemImage: "checkmark")
+                } else {
+                    Text(model.displayName(for: id))
+                }
+            }
+        }
+
+        if model.speakerOrder.count > 1 {
+            Divider()
+            Menu("Reassign all of \(model.displayName(for: current))'s segments to…") {
+                ForEach(model.speakerOrder.filter { $0 != current }, id: \.self) { id in
+                    Button(model.displayName(for: id)) {
+                        model.reassignAll(from: current, to: id)
+                    }
+                }
+            }
         }
     }
 
@@ -759,7 +830,7 @@ struct ContentView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            ForEach(model.speakerIDs, id: \.self) { id in
+            ForEach(model.speakerOrder, id: \.self) { id in
                 HStack(spacing: 6) {
                     Menu {
                         ForEach(SpeakerColor.allCases, id: \.self) { option in
@@ -782,7 +853,20 @@ struct ContentView: View {
                                             set: { model.speakerNames[id] = $0 }))
                         .textFieldStyle(.roundedBorder)
                 }
+                .contextMenu {
+                    Button("Remove Speaker", role: .destructive) { model.removeSpeaker(id) }
+                        .disabled(!model.canRemoveSpeaker(id))
+                }
             }
+
+            Button {
+                model.addSpeaker()
+            } label: {
+                Label("Add Speaker", systemImage: "plus")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .help("Add a speaker to assign segments to")
 
             Text("Names apply to this transcript only — the API numbers speakers by who talks first, so they mean something different in the next recording.")
                 .font(.caption2)

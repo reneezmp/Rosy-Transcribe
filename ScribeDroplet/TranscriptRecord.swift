@@ -16,6 +16,12 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
     var fallbackText: String
     var speakerNames: [String: String]
     var speakerColors: [String: SpeakerColor]
+    /// Every speaker in this transcript, including any added by hand that own
+    /// no segments yet. Optional so that records written before this existed
+    /// still decode — the synthesised decoder uses `decodeIfPresent` for
+    /// optional properties, and `TranscriptRecord.speakers` falls back to
+    /// deriving the list from the turns.
+    var speakerOrder: [String]?
 
     init(id: UUID = UUID(),
          title: String = "",
@@ -25,7 +31,8 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
          turns: [SpeakerTurn] = [],
          fallbackText: String = "",
          speakerNames: [String: String] = [:],
-         speakerColors: [String: SpeakerColor] = [:]) {
+         speakerColors: [String: SpeakerColor] = [:],
+         speakerOrder: [String]? = nil) {
         self.id = id
         self.title = title
         self.createdAt = createdAt
@@ -35,6 +42,14 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
         self.fallbackText = fallbackText
         self.speakerNames = speakerNames
         self.speakerColors = speakerColors
+        self.speakerOrder = speakerOrder
+    }
+
+    /// The speaker list, derived from the turns when the record predates
+    /// `speakerOrder` being stored.
+    var speakers: [String] {
+        if let speakerOrder, !speakerOrder.isEmpty { return speakerOrder }
+        return TranscriptFormatter.speakerIDs(in: turns)
     }
 
     /// Never blank: an untitled transcript falls back to the file it came

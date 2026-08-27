@@ -60,6 +60,7 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 | `Keyterms.swift` | Glossary parsing and limits |
 | `SpeakerColor.swift` | The speaker palette, free of SwiftUI |
 | `TranscriptRecord.swift` | A saved transcript, and the on-disk store |
+| `SpeakerEditor.swift` | Reassigning segments, free of UI |
 | `KeychainStore.swift` | The API key, and migration off `UserDefaults` |
 
 `TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
@@ -190,6 +191,21 @@ well, so every choice stays legible in both light and dark mode.
 `SpeakerColor` is an enum of names with no SwiftUI import; `ContentView` maps
 each case to a `Color` in a switch that must be exhaustive, so the palette and
 its colours cannot drift apart.
+
+### Fixing what diarization got wrong
+
+Right-click a speaker's name in the transcript to move that one segment to
+another speaker, or to move **all** of that speaker's segments at once — the
+fix for one person being split into two. **Add Speaker** in the People panel
+creates someone to assign segments to; a speaker who owns no segments can be
+removed again from their right-click menu.
+
+Reassignment never merges or deletes a segment. Adjacent segments by the same
+speaker are joined only when the transcript is rendered — the name is printed
+once and the text runs together — while the underlying segments stay separate.
+That is what makes every reassignment reversible: physically merging a moved
+segment into its neighbours would destroy the boundary and there would be no
+way to put it back.
 
 ## The library
 

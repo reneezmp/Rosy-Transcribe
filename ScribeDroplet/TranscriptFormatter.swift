@@ -3,7 +3,8 @@ import Foundation
 /// One run of consecutive words spoken by the same speaker.
 struct SpeakerTurn: Equatable, Codable {
     /// The raw API id, e.g. "speaker_0". Nil when diarization returned nothing.
-    let speakerID: String?
+    /// Mutable because a segment can be reassigned to another speaker.
+    var speakerID: String?
     let text: String
 }
 
@@ -56,9 +57,28 @@ enum TranscriptFormatter {
         guard !turns.isEmpty else {
             return fallbackText.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return turns
+        return merged(turns)
             .map { "\(displayName(for: $0.speakerID, names: names)):\n\($0.text)" }
             .joined(separator: "\n\n")
+    }
+
+    /// Joins adjacent turns by the same speaker.
+    ///
+    /// Only ever applied on the way out. Two adjacent turns by one speaker can
+    /// only arise from a reassignment, and keeping them separate in the data
+    /// is what makes that reassignment reversible — but the reader should see
+    /// one block of speech, not the same name twice in a row.
+    static func merged(_ turns: [SpeakerTurn]) -> [SpeakerTurn] {
+        var out: [SpeakerTurn] = []
+        for turn in turns {
+            if let last = out.last, last.speakerID == turn.speakerID {
+                out[out.count - 1] = SpeakerTurn(speakerID: last.speakerID,
+                                                 text: last.text + " " + turn.text)
+            } else {
+                out.append(turn)
+            }
+        }
+        return out
     }
 
     /// Convenience for the unnamed case.
@@ -84,7 +104,7 @@ enum TranscriptFormatter {
             let flat = fallbackText.trimmingCharacters(in: .whitespacesAndNewlines)
             return flat.isEmpty ? out : out + flat + "\n"
         }
-        out += turns
+        out += merged(turns)
             .map { "**\(displayName(for: $0.speakerID, names: names))**\n\($0.text)" }
             .joined(separator: "\n\n")
         return out + "\n"

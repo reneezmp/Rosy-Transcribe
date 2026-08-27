@@ -116,6 +116,41 @@ final class TranscriptRecordTests: XCTestCase {
         XCTAssertEqual(TranscriptRecord(title: "///").suggestedFilename, "Transcript")
     }
 
+    /// Records written before `speakerOrder` existed must still load — there
+    /// are real transcripts on disk from before this field was added.
+    func testARecordWithoutSpeakerOrderStillDecodes() throws {
+        let json = """
+        {
+          "id": "11111111-2222-3333-4444-555555555555",
+          "title": "Reunião",
+          "createdAt": "2023-11-14T22:13:20Z",
+          "sourceFilename": "reunião.m4a",
+          "fallbackText": "Bom dia. Oi.",
+          "speakerNames": { "speaker_0": "Lilian" },
+          "speakerColors": { "speaker_0": 0 },
+          "turns": [
+            { "speakerID": "speaker_0", "text": "Bom dia." },
+            { "speakerID": "speaker_1", "text": "Oi." }
+          ]
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let record = try decoder.decode(TranscriptRecord.self, from: Data(json.utf8))
+
+        XCTAssertEqual(record.title, "Reunião")
+        XCTAssertNil(record.speakerOrder)
+        // Derived from the turns instead.
+        XCTAssertEqual(record.speakers, ["speaker_0", "speaker_1"])
+    }
+
+    func testAStoredSpeakerOrderIsPreferredOverDerivingIt() {
+        let record = TranscriptRecord(turns: [SpeakerTurn(speakerID: "speaker_0", text: "Oi.")],
+                                      speakerOrder: ["speaker_0", "speaker_1"])
+        // speaker_1 was added by hand and owns nothing yet.
+        XCTAssertEqual(record.speakers, ["speaker_0", "speaker_1"])
+    }
+
     func testHasContent() {
         XCTAssertFalse(TranscriptRecord().hasContent)
         XCTAssertTrue(TranscriptRecord(turns: [SpeakerTurn(speakerID: "speaker_0", text: "Oi.")]).hasContent)
