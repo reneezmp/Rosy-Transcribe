@@ -317,17 +317,26 @@ final class TranscriberModel: ObservableObject {
         speakerOrder.append(id)
     }
 
-    /// Only a speaker with nothing attributed to them can be removed —
-    /// otherwise their segments would be orphaned.
-    func canRemoveSpeaker(_ speakerID: String) -> Bool {
-        SpeakerEditor.segmentCount(for: speakerID, in: turns) == 0
-    }
-
+    /// Any speaker can be deleted. Their segments are detached rather than
+    /// destroyed, and show as "Unknown" until reassigned.
     func removeSpeaker(_ speakerID: String) {
-        guard canRemoveSpeaker(speakerID) else { return }
+        turns = SpeakerEditor.unassigning(turns, speakerID: speakerID)
         speakerOrder.removeAll { $0 == speakerID }
         speakerNames[speakerID] = nil
         speakerColors[speakerID] = nil
+        scheduleSave()
+    }
+
+    func initial(for speakerID: String) -> String {
+        TranscriptFormatter.initial(for: speakerID, names: speakerNames)
+    }
+
+    /// Says out loud what deleting will cost, since it is not undoable.
+    func removalHelp(for speakerID: String) -> String {
+        let name = displayName(for: speakerID)
+        let count = SpeakerEditor.segmentCount(for: speakerID, in: turns)
+        guard count > 0 else { return "Delete \(name)" }
+        return "Delete \(name) — their \(count) segment\(count == 1 ? "" : "s") become Unknown"
     }
 
     // MARK: Output
@@ -471,6 +480,8 @@ struct ContentView: View {
     @StateObject private var model = TranscriberModel()
     @State private var isDropTargeted = false
     @State private var isKeyVisible = false
+    @State private var hoveredSpeaker: String?
+    @FocusState private var focusedSpeaker: String?
 
     private let speakerColumnWidth: CGFloat = 120
 
@@ -537,9 +548,12 @@ struct ContentView: View {
             banners
             HStack(alignment: .top, spacing: 12) {
                 transcriptBox
-                if !model.speakerOrder.isEmpty {
+                // Shown whenever there is a transcript, not only when there
+                // are speakers: deleting the last one must still leave Add
+                // Speaker reachable.
+                if model.hasTranscript {
                     peoplePanel
-                        .frame(width: 200)
+                        .frame(width: 210)
                 }
             }
             // Takes the leftover height, but with a bounded *ideal* height so
@@ -793,7 +807,9 @@ struct ContentView: View {
         return HStack(alignment: .top, spacing: 10) {
             Text(model.displayName(for: turn.speakerID))
                 .font(.system(.body, design: .monospaced).weight(.semibold))
-                .foregroundStyle(model.color(for: turn.speakerID).color)
+                .foregroundStyle(turn.speakerID == nil
+                                 ? Color.secondary
+                                 : model.color(for: turn.speakerID).color)
                 .frame(width: speakerColumnWidth, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 // The whole column is the target, so a continuation row can be
@@ -844,32 +860,12 @@ struct ContentView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            ForEach(model.speakerOrder, id: \.self) { id in
-                HStack(spacing: 6) {
-                    Menu {
-                        ForEach(SpeakerColor.allCases, id: \.self) { option in
-                            Button(option.displayName) { model.speakerColors[id] = option }
-                        }
-                    } label: {
-                        Circle()
-                            .fill(model.color(for: id).color)
-                            .frame(width: 13, height: 13)
+            VStack(spacing: 0) {
+                ForEach(model.speakerOrder.indices, id: \.self) { index in
+                    personRow(model.speakerOrder[index])
+                    if index < model.speakerOrder.count - 1 {
+                        Divider()
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .help("Change speaker colour")
-
-                    // The placeholder is the default label, so an empty field
-                    // shows exactly what the transcript shows.
-                    TextField(TranscriptFormatter.label(for: id),
-                              text: Binding(get: { model.speakerNames[id] ?? "" },
-                                            set: { model.speakerNames[id] = $0 }))
-                        .textFieldStyle(.roundedBorder)
-                }
-                .contextMenu {
-                    Button("Remove Speaker", role: .destructive) { model.removeSpeaker(id) }
-                        .disabled(!model.canRemoveSpeaker(id))
                 }
             }
 
@@ -893,6 +889,75 @@ struct ContentView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// A badge and a name at rest; a name field, a colour menu and a delete
+    /// button under the pointer.
+    ///
+    /// The row keeps its editing form while the field has focus, not only
+    /// while hovered — otherwise nudging the mouse away mid-rename would
+    /// swap the field out from under the cursor.
+    private func personRow(_ id: String) -> some View {
+        let isEditing = hoveredSpeaker == id || focusedSpeaker == id
+
+        return HStack(spacing: 6) {
+            if isEditing {
+                TextField(TranscriptFormatter.label(for: id),
+                          text: Binding(get: { model.speakerNames[id] ?? "" },
+                                        set: { model.speakerNames[id] = $0 }))
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedSpeaker, equals: id)
+
+                Menu {
+                    ForEach(SpeakerColor.allCases, id: \.self) { option in
+                        Button(option.displayName) { model.speakerColors[id] = option }
+                    }
+                } label: {
+                    Image(systemName: "paintpalette")
+                        .foregroundStyle(model.color(for: id).color)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Change colour")
+
+                Button {
+                    if focusedSpeaker == id { focusedSpeaker = nil }
+                    model.removeSpeaker(id)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help(model.removalHelp(for: id))
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(model.color(for: id).color)
+                    Text(model.initial(for: id))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 24, height: 24)
+
+                Text(model.displayName(for: id))
+                    .foregroundStyle(model.color(for: id).color)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 0)
+            }
+        }
+        // A fixed height, so the row does not jump as it swaps between the
+        // two forms under the pointer.
+        .frame(height: 30)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            if hovering {
+                hoveredSpeaker = id
+            } else if hoveredSpeaker == id {
+                hoveredSpeaker = nil
+            }
+        }
     }
 }
 

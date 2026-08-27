@@ -42,6 +42,16 @@ enum SpeakerEditor {
         return "speaker_\(index)"
     }
 
+    /// Detaches every segment belonging to a speaker, leaving them unowned
+    /// and therefore shown as "Unknown". Deleting a speaker must never delete
+    /// what they said.
+    static func unassigning(_ turns: [SpeakerTurn], speakerID: String) -> [SpeakerTurn] {
+        turns.map { turn in
+            guard turn.speakerID == speakerID else { return turn }
+            return SpeakerTurn(speakerID: nil, text: turn.text)
+        }
+    }
+
     /// How many segments a speaker currently owns. A speaker with none can be
     /// removed safely; one with segments cannot, or they would be orphaned.
     static func segmentCount(for speakerID: String, in turns: [SpeakerTurn]) -> Int {

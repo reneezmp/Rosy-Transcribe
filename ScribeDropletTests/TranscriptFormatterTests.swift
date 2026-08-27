@@ -95,8 +95,8 @@ final class TranscriptFormatterTests: XCTestCase {
     func testUnrecognisedSpeakerIDsAreShownUnchanged() {
         XCTAssertEqual(TranscriptFormatter.label(for: "agent"), "agent")
         XCTAssertEqual(TranscriptFormatter.label(for: "speaker_x"), "speaker_x")
-        XCTAssertEqual(TranscriptFormatter.label(for: nil), "Speaker")
-        XCTAssertEqual(TranscriptFormatter.label(for: ""), "Speaker")
+        XCTAssertEqual(TranscriptFormatter.label(for: nil), "Unknown")
+        XCTAssertEqual(TranscriptFormatter.label(for: ""), "Unknown")
     }
 
     // MARK: - Rendering
@@ -444,5 +444,68 @@ final class TurnMergingTests: XCTestCase {
                                                     names: ["speaker_0": "Lilian"],
                                                     fallbackText: ""),
                        "**Lilian**\num dois\n")
+    }
+}
+
+// MARK: - Badges and deleting a speaker
+
+final class SpeakerBadgeTests: XCTestCase {
+
+    func testANamedSpeakerGetsTheirFirstLetter() {
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "Lilian"]), "L")
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "João"]), "J")
+    }
+
+    func testTheLetterIsUppercasedAndIgnoresLeadingSpace() {
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "  renée"]), "R")
+    }
+
+    /// "S" for every "Speaker N" would identify nobody, so an unnamed speaker
+    /// is badged with their number instead.
+    func testAnUnnamedSpeakerGetsTheirNumber() {
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: [:]), "1")
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_2", names: [:]), "3")
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "   "]), "1")
+    }
+
+    func testAnUnrecognisedSpeakerGetsAQuestionMark() {
+        XCTAssertEqual(TranscriptFormatter.initial(for: nil, names: [:]), "?")
+        XCTAssertEqual(TranscriptFormatter.initial(for: "agent", names: [:]), "?")
+    }
+}
+
+final class DeletingASpeakerTests: XCTestCase {
+
+    private func turn(_ text: String, _ speaker: String?) -> SpeakerTurn {
+        SpeakerTurn(speakerID: speaker, text: text)
+    }
+
+    /// Deleting a speaker must never delete what they said.
+    func testTheirSegmentsAreDetachedNotDestroyed() {
+        let turns = [turn("um", "speaker_0"), turn("dois", "speaker_1"), turn("três", "speaker_0")]
+        let after = SpeakerEditor.unassigning(turns, speakerID: "speaker_0")
+
+        XCTAssertEqual(after.count, 3)
+        XCTAssertEqual(after.map(\.text), ["um", "dois", "três"])
+        XCTAssertEqual(after.map(\.speakerID), [nil, "speaker_1", nil])
+    }
+
+    func testDetachedSegmentsReadAsUnknown() {
+        let after = SpeakerEditor.unassigning([turn("um", "speaker_0")], speakerID: "speaker_0")
+        XCTAssertEqual(TranscriptFormatter.format(turns: after, names: [:], fallbackText: ""),
+                       "Unknown:\num")
+    }
+
+    func testDeletingSomeoneElseLeavesThemAlone() {
+        let turns = [turn("um", "speaker_0")]
+        XCTAssertEqual(SpeakerEditor.unassigning(turns, speakerID: "speaker_9"), turns)
+    }
+
+    /// The segments are recoverable: an Unknown run can be handed to anyone.
+    func testUnknownSegmentsCanBeReassignedBack() {
+        let turns = [turn("um", "speaker_0"), turn("dois", "speaker_0")]
+        let orphaned = SpeakerEditor.unassigning(turns, speakerID: "speaker_0")
+        let recovered = SpeakerEditor.reassigningAll(orphaned, from: nil, to: "speaker_1")
+        XCTAssertEqual(recovered.map(\.speakerID), ["speaker_1", "speaker_1"])
     }
 }

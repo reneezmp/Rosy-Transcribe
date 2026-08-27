@@ -197,8 +197,19 @@ its colours cannot drift apart.
 Right-click a speaker's name in the transcript to move that one segment to
 another speaker, or to move **all** of that speaker's segments at once — the
 fix for one person being split into two. **Add Speaker** in the People panel
-creates someone to assign segments to; a speaker who owns no segments can be
-removed again from their right-click menu.
+creates someone to assign segments to.
+
+Each row in the People panel shows a coloured badge and the name at rest —
+the badge carries the speaker's initial, or their number while they are still
+unnamed, since "S" for every "Speaker N" identifies nobody. Hovering swaps the
+row for a name field, a colour menu and a delete button. The row keeps that
+form while the field has focus rather than only while hovered, so nudging the
+mouse mid-rename does not pull the field out from under the cursor.
+
+Deleting a speaker never deletes what they said. Their segments are detached
+and shown as **Unknown**, and can be handed to anyone with the same
+right-click menu. Because of that the panel stays visible even with no
+speakers left, or Add Speaker would be unreachable.
 
 Reassignment never merges or deletes a segment. That is what makes it
 reversible: physically merging a moved segment into its neighbours would

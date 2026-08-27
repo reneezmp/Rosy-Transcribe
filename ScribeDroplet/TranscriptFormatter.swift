@@ -127,7 +127,9 @@ enum TranscriptFormatter {
     /// Any id that does not match that shape is shown unchanged rather than
     /// mangled, so a future API change degrades visibly instead of silently.
     static func label(for speakerID: String?) -> String {
-        guard let speakerID, !speakerID.isEmpty else { return "Speaker" }
+        // No speaker means either diarization found none, or the speaker they
+        // belonged to was deleted. "Unknown" is honest about both.
+        guard let speakerID, !speakerID.isEmpty else { return "Unknown" }
         let prefix = "speaker_"
         if speakerID.hasPrefix(prefix), let index = Int(speakerID.dropFirst(prefix.count)) {
             return "Speaker \(index + 1)"
@@ -145,6 +147,24 @@ enum TranscriptFormatter {
             ordered.append(id)
         }
         return ordered
+    }
+
+    /// The single character shown in a speaker's badge.
+    ///
+    /// A named speaker gets their first letter. An unnamed one gets their
+    /// number, because "S" for every "Speaker N" would tell you nothing.
+    static func initial(for speakerID: String?, names: [String: String]) -> String {
+        if let speakerID,
+           let assigned = names[speakerID]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let first = assigned.first {
+            return String(first).uppercased()
+        }
+        let prefix = "speaker_"
+        if let speakerID, speakerID.hasPrefix(prefix),
+           let index = Int(speakerID.dropFirst(prefix.count)) {
+            return String(index + 1)
+        }
+        return "?"
     }
 
     /// The distinct speakers in a set of turns, in order of first appearance.
