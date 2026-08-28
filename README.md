@@ -364,14 +364,19 @@ and runs without the package. Updating is simply absent until it is added.
 
 ### First-time setup
 
-1. In Xcode: **File ▸ Add Package Dependencies…**, enter
-   `https://github.com/sparkle-project/Sparkle`, add it to the **RosyTranscribe**
-   target. (Doing this in Xcode rather than by hand-editing the project file is
-   deliberate — Xcode writes the package entries correctly.)
-2. Find `generate_keys` in the downloaded package's `bin` directory and run it.
-   It puts a private key in your login Keychain and prints a public key.
-3. Put that public key in the project's `INFOPLIST_KEY_SUPublicEDKey` build
-   setting, for both Debug and Release.
+The package is already declared in the project, so Xcode resolves it on the
+next open. What is left is the signing key, which cannot be committed: it is
+the only thing preventing someone else from shipping your users an "update".
+
+1. Build once so Xcode fetches the package, then find `generate_keys` in
+   `.build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/` and run
+   it. It puts a private key in your login Keychain and prints a public key.
+2. Replace `REPLACE_WITH_PUBLIC_ED_KEY` in the project's
+   `INFOPLIST_KEY_SUPublicEDKey` build setting with that public key, in both
+   Debug and Release.
+
+Until step 2 is done Sparkle will refuse every update it is offered, which is
+the correct behaviour for an unsigned feed.
 
 The private key never leaves your Keychain. Anyone can read the appcast; only
 someone holding that key can publish an update the app will accept.

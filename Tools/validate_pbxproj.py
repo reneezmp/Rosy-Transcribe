@@ -127,8 +127,14 @@ for t in proj["targets"]:
         phase = objs[ph]
         print("   phase:", phase["isa"], "files:", len(phase["files"]))
         for bf in phase["files"]:
-            fr = objs[objs[bf]["fileRef"]]
-            assert "path" in fr, fr
+            entry = objs[bf]
+            # A build file references either a file in the repo or a product
+            # vended by a Swift package.
+            if "fileRef" in entry:
+                assert "path" in objs[entry["fileRef"]], entry
+            else:
+                assert "productRef" in entry, entry
+                assert objs[entry["productRef"]]["isa"] == "XCSwiftPackageProductDependency"
 
 # deployment target + arch everywhere
 for i, o in objs.items():

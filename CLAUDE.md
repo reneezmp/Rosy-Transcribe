@@ -169,10 +169,13 @@ phase.
 **Audio playback, and click-a-word-to-play.** The app has never opened the
 audio — it uploads bytes and forgets them. Two things block this:
 
-- *Where the audio lives.* The library stores no audio, so reopening a
-  transcript next week has nothing to play. Either store the file's path
-  (cheap, breaks when the file moves) or copy it in (robust, roughly 11 MB per
-  40 minutes). Undecided.
+- *Where the audio lives.* **Decided: store the path, never a copy.** The
+  recordings are meeting audio that gets deleted soon after transcribing, so
+  copying it into the library would keep privileged material alive longer than
+  its owner wants — the cheaper option is also the more careful one here.
+  The consequence is that a missing file is the *normal* end state, not an
+  edge case: say so plainly and offer to relocate, rather than treating it as
+  an error.
 - *The timestamps are thrown away.* `TranscriptFormatter.turns` keeps text and
   speaker and discards each word's `start`/`end`. Per-word seeking needs them
   kept, which changes the shape of a saved record.

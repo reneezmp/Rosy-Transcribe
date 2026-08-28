@@ -37,6 +37,7 @@
 		1B000000000000000000001C /* SegmentTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* SegmentTextView.swift */; };
 		1B000000000000000000001D /* SegmentTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* SegmentTextView.swift */; };
 		1B000000000000000000001E /* UpdaterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000016 /* UpdaterService.swift */; };
+		1B000000000000000000001F /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 230000000000000000000001 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -69,6 +70,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1B000000000000000000001F /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -150,6 +152,9 @@
 			dependencies = (
 			);
 			name = RosyTranscribe;
+			packageProductDependencies = (
+				230000000000000000000001 /* Sparkle */,
+			);
 			productName = RosyTranscribe;
 			productReference = 1A0000000000000000000009 /* RosyTranscribe.app */;
 			productType = "com.apple.product-type.application";
@@ -198,6 +203,9 @@
 				Base,
 			);
 			mainGroup = 1C0000000000000000000001;
+			packageReferences = (
+				220000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = 1C0000000000000000000004 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -333,6 +341,7 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Rosy Transcribe";
+				INFOPLIST_KEY_SUPublicEDKey = REPLACE_WITH_PUBLIC_ED_KEY;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -361,6 +370,7 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Rosy Transcribe";
+				INFOPLIST_KEY_SUPublicEDKey = REPLACE_WITH_PUBLIC_ED_KEY;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -441,6 +451,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		220000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		230000000000000000000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 220000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1F0000000000000000000001 /* Project object */;
 }
