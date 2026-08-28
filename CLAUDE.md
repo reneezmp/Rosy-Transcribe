@@ -144,10 +144,41 @@ configurations. Adding a source file means a new `1A` reference, one `1B` entry
 per target it belongs to, a group entry, and an entry in each target's sources
 phase.
 
-## Still unbuilt
+## Roadmap
 
-Audio playback and click-a-word-to-play. Both need a decision first: whether the
-library stores only the audio file's path (cheap, breaks when the file moves) or
-copies the audio in (robust, roughly 11 MB per 40 minutes). Word timestamps are
-currently discarded by `TranscriptFormatter.turns`; per-word seeking would need
-them kept.
+**Audio playback, and click-a-word-to-play.** The app has never opened the
+audio — it uploads bytes and forgets them. Two things block this:
+
+- *Where the audio lives.* The library stores no audio, so reopening a
+  transcript next week has nothing to play. Either store the file's path
+  (cheap, breaks when the file moves) or copy it in (robust, roughly 11 MB per
+  40 minutes). Undecided.
+- *The timestamps are thrown away.* `TranscriptFormatter.turns` keeps text and
+  speaker and discards each word's `start`/`end`. Per-word seeking needs them
+  kept, which changes the shape of a saved record.
+
+When it is built, **bind seeking to ⌥-click or a per-segment play button, not
+double-click** — double-click already means "select word" to the system, and
+fighting that breaks ordinary text behaviour. `SegmentTextView` is `NSTextView`
+partly so this is possible: it can map a click point to a character index.
+
+**A real icon.** The current one is a placeholder — `Tools/make_icon.py` draws
+it from a handful of constants at the top of the file.
+
+**The rename.** See the section above; two strings must survive it.
+
+### Known limitations, accepted for now
+
+- **No undo for structural edits.** `NSTextView` gives undo *within* one
+  segment, but deleting a segment, deleting a speaker, or reassigning has no
+  undo. Every one of those is non-destructive by design — deleting a speaker
+  detaches their segments rather than removing them, and reassignment keeps
+  segments separate — so the damage is recoverable by hand, but there is no
+  ⌘Z for it.
+- **Selection cannot span two segments,** since each row is its own text view.
+  Spanning would mean collapsing the transcript into one continuous view and
+  losing the two-column layout. Copy All and the Markdown export cover wanting
+  the whole thing.
+- **Find searches segment text only** — not speaker names, and not the flat
+  `fallbackText` shown when a transcript came back without diarization. Find is
+  disabled in that second case rather than silently answering "No matches".

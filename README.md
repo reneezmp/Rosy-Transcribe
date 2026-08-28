@@ -314,7 +314,7 @@ you have typed one.
 
 ## The icon
 
-Rose gold, with a microphone. `Tools/make_icon.py` draws it and writes the ten
+Rose gold, with a microphone. **A placeholder** until there is a real one. `Tools/make_icon.py` draws it and writes the ten
 PNGs of `ScribeDroplet/Assets.xcassets/AppIcon.appiconset`:
 
 ```sh
