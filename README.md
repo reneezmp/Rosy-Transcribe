@@ -371,9 +371,28 @@ the only thing preventing someone else from shipping your users an "update".
 1. Build once so Xcode fetches the package, then find `generate_keys` in
    `.build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/` and run
    it. It puts a private key in your login Keychain and prints a public key.
-2. Replace `REPLACE_WITH_PUBLIC_ED_KEY` in the project's
-   `INFOPLIST_KEY_SUPublicEDKey` build setting with that public key, in both
-   Debug and Release.
+2. Put that public key in the `SUPublicEDKey` build setting. Either:
+
+   **In Xcode** — select the project, the **RosyTranscribe** target,
+   **Build Settings**, search `SUPublicEDKey`, and replace the placeholder.
+   Setting the top-level row fills in both Debug and Release at once.
+
+   **Or in Terminal** — one line, both configurations:
+
+   ```sh
+   sed -i '' 's|REPLACE_WITH_PUBLIC_ED_KEY|PASTE_THE_KEY_HERE|g' \
+     RosyTranscribe.xcodeproj/project.pbxproj
+   ```
+
+   The `|` delimiter matters: the key is base64 and usually contains `/`,
+   which would end a `s/.../.../` expression early. Keep the surrounding
+   quotes in the file for the same reason — an unquoted base64 value with a
+   `/` or `+` in it is not valid in a project file, and Xcode will refuse to
+   open one.
+
+   `project.pbxproj` lives *inside* `RosyTranscribe.xcodeproj`, which Finder
+   shows as a single item: right-click it and choose **Show Package
+   Contents** to see in. From Terminal it is just a normal path.
 
 Until step 2 is done Sparkle will refuse every update it is offered, which is
 the correct behaviour for an unsigned feed.
