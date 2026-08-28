@@ -735,7 +735,7 @@ struct ContentView: View {
                 Text("Key terms")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                TextField("proferida, averbação, embargos de terceiros, Dr. Christopher",
+                TextField("proferida, averbação, embargos de terceiros, Dr. Silva",
                           text: $model.keytermsText,
                           axis: .vertical)
                     .textFieldStyle(.roundedBorder)

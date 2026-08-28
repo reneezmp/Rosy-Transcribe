@@ -297,10 +297,10 @@ a library of text.
 ```markdown
 # Title of the meeting
 
-**Renée**
+**Clara**
 Blablablabla
 
-**Lilian**
+**Ana**
 Blablablabla
 ```
 

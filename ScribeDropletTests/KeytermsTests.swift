@@ -93,17 +93,17 @@ final class KeytermsTests: XCTestCase {
     /// characters". An array parameter over multipart is the same name
     /// repeated, one part per term.
     func testKeytermsAreRepeatedPartsRatherThanAJSONArray() throws {
-        let terms = try Keyterms.validated("proferida, averbação, Dr. Christopher")
+        let terms = try Keyterms.validated("proferida, averbação, Dr. Silva")
         let fields = TranscriptionService.formFields(languageCode: "por", keyterms: terms)
 
         XCTAssertEqual(fields.filter { $0.name == "keyterms" },
                        [MultipartField("keyterms", "proferida"),
                         MultipartField("keyterms", "averbação"),
-                        MultipartField("keyterms", "Dr. Christopher")])
+                        MultipartField("keyterms", "Dr. Silva")])
     }
 
     func testKeytermsReachTheEnvelopeAsOneBarePartPerTerm() throws {
-        let terms = try Keyterms.validated("proferida, averbação, Dr. Christopher")
+        let terms = try Keyterms.validated("proferida, averbação, Dr. Silva")
         let body = MultipartBuilder(boundary: "B").body(
             fields: TranscriptionService.formFields(languageCode: "por", keyterms: terms),
             fileFieldName: "file",

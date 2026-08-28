@@ -9,7 +9,7 @@ final class MarkdownExportTests: XCTestCase {
         SpeakerTurn(speakerID: speaker, text: text)
     }
 
-    private let names = ["speaker_0": "Renée", "speaker_1": "Lilian"]
+    private let names = ["speaker_0": "Clara", "speaker_1": "Ana"]
 
     func testMarkdownMatchesTheRequestedShape() {
         let turns = [turn("Blablablabla", "speaker_0"),
@@ -18,13 +18,13 @@ final class MarkdownExportTests: XCTestCase {
         let expected = """
         # Title of the meeting
 
-        **Renée**
+        **Clara**
         Blablablabla
 
-        **Lilian**
+        **Ana**
         Blablablabla
 
-        **Renée**
+        **Clara**
         Blablabla
 
         """
@@ -43,7 +43,7 @@ final class MarkdownExportTests: XCTestCase {
                                                         turns: turns,
                                                         names: names,
                                                         fallbackText: ""),
-                           "**Renée**\nBom dia.\n")
+                           "**Clara**\nBom dia.\n")
         }
     }
 
@@ -126,7 +126,7 @@ final class TranscriptRecordTests: XCTestCase {
           "createdAt": "2023-11-14T22:13:20Z",
           "sourceFilename": "reunião.m4a",
           "fallbackText": "Bom dia. Oi.",
-          "speakerNames": { "speaker_0": "Lilian" },
+          "speakerNames": { "speaker_0": "Ana" },
           "speakerColors": { "speaker_0": 0 },
           "turns": [
             { "speakerID": "speaker_0", "text": "Bom dia." },
@@ -186,7 +186,7 @@ final class TranscriptStoreTests: XCTestCase {
                          turns: [SpeakerTurn(speakerID: "speaker_0", text: "Bom dia."),
                                  SpeakerTurn(speakerID: "speaker_1", text: "Oi.")],
                          fallbackText: "Bom dia. Oi.",
-                         speakerNames: ["speaker_0": "Lilian"],
+                         speakerNames: ["speaker_0": "Ana"],
                          speakerColors: ["speaker_0": .blue, "speaker_1": .orange])
     }
 
@@ -259,7 +259,7 @@ final class TranscriptStoreTests: XCTestCase {
         try store.save(original)
         let loaded = try XCTUnwrap(store.load().first)
 
-        XCTAssertEqual(loaded.speakerNames["speaker_0"], "Lilian")
+        XCTAssertEqual(loaded.speakerNames["speaker_0"], "Ana")
         XCTAssertEqual(loaded.speakerColors["speaker_1"], .orange)
         XCTAssertEqual(loaded.turns, original.turns)
         XCTAssertEqual(loaded.detectedLanguage, "por (100% confidence)")

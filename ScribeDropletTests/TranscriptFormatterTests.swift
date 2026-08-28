@@ -248,14 +248,14 @@ final class SpeakerNamingTests: XCTestCase {
 
     func testAnAssignedNameReplacesTheDefaultLabel() {
         XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_0",
-                                                       names: ["speaker_0": "Lilian"]),
-                       "Lilian")
+                                                       names: ["speaker_0": "Ana"]),
+                       "Ana")
     }
 
     func testAnUnnamedSpeakerKeepsItsNumberedLabel() {
         XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_1", names: [:]), "Speaker 2")
         XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_1",
-                                                       names: ["speaker_0": "Lilian"]),
+                                                       names: ["speaker_0": "Ana"]),
                        "Speaker 2")
     }
 
@@ -270,28 +270,28 @@ final class SpeakerNamingTests: XCTestCase {
 
     func testNamesAreTrimmed() {
         XCTAssertEqual(TranscriptFormatter.displayName(for: "speaker_0",
-                                                       names: ["speaker_0": "  João  "]),
-                       "João")
+                                                       names: ["speaker_0": "  Bruno  "]),
+                       "Bruno")
     }
 
     func testRenderedTranscriptUsesAssignedNames() {
         let turns = [turn("Bom dia.", "speaker_0"), turn("Oi.", "speaker_1")]
-        let names = ["speaker_0": "Lilian", "speaker_1": "João"]
+        let names = ["speaker_0": "Ana", "speaker_1": "Bruno"]
         XCTAssertEqual(TranscriptFormatter.format(turns: turns, names: names, fallbackText: ""),
-                       "Lilian:\nBom dia.\n\nJoão:\nOi.")
+                       "Ana:\nBom dia.\n\nBruno:\nOi.")
     }
 
     func testPartiallyNamedTranscriptMixesNamesAndDefaults() {
         let turns = [turn("Bom dia.", "speaker_0"), turn("Oi.", "speaker_1")]
         XCTAssertEqual(TranscriptFormatter.format(turns: turns,
-                                                  names: ["speaker_0": "Lilian"],
+                                                  names: ["speaker_0": "Ana"],
                                                   fallbackText: ""),
-                       "Lilian:\nBom dia.\n\nSpeaker 2:\nOi.")
+                       "Ana:\nBom dia.\n\nSpeaker 2:\nOi.")
     }
 
     func testFormattingStillFallsBackWhenThereAreNoTurns() {
         XCTAssertEqual(TranscriptFormatter.format(turns: [],
-                                                  names: ["speaker_0": "Lilian"],
+                                                  names: ["speaker_0": "Ana"],
                                                   fallbackText: "  Bom dia. "),
                        "Bom dia.")
     }
@@ -446,26 +446,26 @@ final class TurnMergingTests: XCTestCase {
     /// there, so the edit can be undone by reassigning it back.
     func testReassignmentReadsAsOneBlockButStaysReversible() {
         let original = [turn("um", "speaker_0"), turn("dois", "speaker_1"), turn("três", "speaker_0")]
-        let names = ["speaker_0": "Lilian", "speaker_1": "João"]
+        let names = ["speaker_0": "Ana", "speaker_1": "Bruno"]
 
         let edited = SpeakerEditor.assigning(original, at: 1, to: "speaker_0")
         XCTAssertEqual(edited.count, 3, "segments must survive the reassignment")
         XCTAssertEqual(TranscriptFormatter.format(turns: edited, names: names, fallbackText: ""),
-                       "Lilian:\num dois três")
+                       "Ana:\num dois três")
 
         let undone = SpeakerEditor.assigning(edited, at: 1, to: "speaker_1")
         XCTAssertEqual(undone, original)
         XCTAssertEqual(TranscriptFormatter.format(turns: undone, names: names, fallbackText: ""),
-                       "Lilian:\num\n\nJoão:\ndois\n\nLilian:\ntrês")
+                       "Ana:\num\n\nBruno:\ndois\n\nAna:\ntrês")
     }
 
     func testMarkdownAlsoMergesAdjacentSegments() {
         let turns = [turn("um", "speaker_0"), turn("dois", "speaker_0")]
         XCTAssertEqual(TranscriptFormatter.markdown(title: "",
                                                     turns: turns,
-                                                    names: ["speaker_0": "Lilian"],
+                                                    names: ["speaker_0": "Ana"],
                                                     fallbackText: ""),
-                       "**Lilian**\num dois\n")
+                       "**Ana**\num dois\n")
     }
 }
 
@@ -474,12 +474,12 @@ final class TurnMergingTests: XCTestCase {
 final class SpeakerBadgeTests: XCTestCase {
 
     func testANamedSpeakerGetsTheirFirstLetter() {
-        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "Lilian"]), "L")
-        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "João"]), "J")
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "Ana"]), "A")
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "Bruno"]), "B")
     }
 
     func testTheLetterIsUppercasedAndIgnoresLeadingSpace() {
-        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "  renée"]), "R")
+        XCTAssertEqual(TranscriptFormatter.initial(for: "speaker_0", names: ["speaker_0": "  clara"]), "C")
     }
 
     /// "S" for every "Speaker N" would identify nobody, so an unnamed speaker
@@ -587,9 +587,9 @@ final class TextEditingTests: XCTestCase {
         let typed = SpeakerEditor.replacingText(sample, at: 1, with: "")
         let after = SpeakerEditor.committingText(typed, at: 1)
         XCTAssertEqual(TranscriptFormatter.format(turns: after,
-                                                  names: ["speaker_0": "Lilian"],
+                                                  names: ["speaker_0": "Ana"],
                                                   fallbackText: ""),
-                       "Lilian:\num três")
+                       "Ana:\num três")
     }
 
     /// Regression: `format` falls back to the flat API text when there are no
@@ -613,8 +613,8 @@ final class TextEditingTests: XCTestCase {
                                                  with: "vinte barra cinco")
         XCTAssertEqual(TranscriptFormatter.markdown(title: "",
                                                     turns: edited,
-                                                    names: ["speaker_0": "Lilian"],
+                                                    names: ["speaker_0": "Ana"],
                                                     fallbackText: ""),
-                       "**Lilian**\nvinte barra cinco\n")
+                       "**Ana**\nvinte barra cinco\n")
     }
 }

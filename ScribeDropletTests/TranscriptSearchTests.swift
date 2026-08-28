@@ -44,7 +44,7 @@ final class TranscriptSearchTests: XCTestCase {
         XCTAssertEqual(matched("averbacao", [turn("essa averbação vinte")]), ["averbação"])
         XCTAssertEqual(matched("ineficacia", [turn("declaração de ineficácia relativa")]),
                        ["ineficácia"])
-        XCTAssertEqual(matched("Joao", [turn("O dia 12 é o seu, João?")]), ["João"])
+        XCTAssertEqual(matched("Ines", [turn("O dia 12 é o seu, Inês?")]), ["Inês"])
     }
 
     func testAnAccentedQueryStillFindsAccentedText() {
@@ -142,8 +142,8 @@ final class HighlightRangeTests: XCTestCase {
     }
 
     func testARangeCoveringTheWholeString() {
-        let text = "João"
-        XCTAssertEqual(nsRange("João", in: text), NSRange(location: 0, length: 4))
+        let text = "Inês"
+        XCTAssertEqual(nsRange("Inês", in: text), NSRange(location: 0, length: 4))
     }
 
     /// Every range the search produces must convert, and must convert back to
