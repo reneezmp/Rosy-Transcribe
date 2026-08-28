@@ -42,7 +42,9 @@ final class TranscriberModel: ObservableObject {
     @Published var selectedFile: URL?
     @Published var selectedFileSize: Int64?
     @Published var sourceFilename: String = ""
-    @Published var turns: [SpeakerTurn] = []
+    @Published var turns: [SpeakerTurn] = [] {
+        didSet { scheduleSave() }
+    }
     /// The flat transcript, shown when diarization produced nothing to group.
     @Published var fallbackText: String = ""
     @Published var detectedLanguage: String?
@@ -303,12 +305,21 @@ final class TranscriberModel: ObservableObject {
 
     func assign(turnAt index: Int, to speakerID: String) {
         turns = SpeakerEditor.assigning(turns, at: index, to: speakerID)
-        scheduleSave()
     }
 
     func reassignAll(from source: String?, to destination: String) {
         turns = SpeakerEditor.reassigningAll(turns, from: source, to: destination)
-        scheduleSave()
+    }
+
+    // MARK: Editing the text
+
+    func textBinding(at index: Int) -> Binding<String> {
+        Binding(get: { self.turns.indices.contains(index) ? self.turns[index].text : "" },
+                set: { self.turns = SpeakerEditor.replacingText(self.turns, at: index, with: $0) })
+    }
+
+    func commitEdit(at index: Int) {
+        turns = SpeakerEditor.committingText(turns, at: index)
     }
 
     func addSpeaker() {
@@ -324,7 +335,6 @@ final class TranscriberModel: ObservableObject {
         speakerOrder.removeAll { $0 == speakerID }
         speakerNames[speakerID] = nil
         speakerColors[speakerID] = nil
-        scheduleSave()
     }
 
     func initial(for speakerID: String) -> String {
@@ -490,6 +500,8 @@ struct ContentView: View {
     @State private var isKeyVisible = false
     @State private var hoveredSpeaker: String?
     @FocusState private var focusedSpeaker: String?
+    @State private var editingTurn: Int?
+    @FocusState private var focusedTurn: Int?
 
     private let speakerColumnWidth: CGFloat = 120
 
@@ -574,7 +586,10 @@ struct ContentView: View {
         .background(
             Color.clear
                 .contentShape(Rectangle())
-                .onTapGesture { focusedSpeaker = nil }
+                .onTapGesture {
+                    focusedSpeaker = nil
+                    finishEditing()
+                }
         )
         // Rosy's screen is 1280x800, which leaves roughly 720pt once the menu
         // bar and the title bar are gone. A 700pt minimum plus padding was
@@ -831,12 +846,45 @@ struct ContentView: View {
                 // right-clicked too.
                 .contentShape(Rectangle())
                 .contextMenu { reassignmentMenu(for: index) }
-            Text(turn.text)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+            if editingTurn == index {
+                // A plain field, styled to match the text it replaces, so the
+                // line does not jump when it swaps in.
+                TextField("", text: model.textBinding(at: index), axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .focused($focusedTurn, equals: index)
+                    .onAppear { focusedTurn = index }
+                    .onSubmit { finishEditing() }
+                    .onExitCommand { finishEditing() }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                // Click to edit. Only the segment under the pointer becomes a
+                // field: hundreds of live text fields in the list would be a
+                // lot to ask of a fanless dual-core, and read-only text is
+                // also what a future find-and-highlight can mark up.
+                Text(turn.text)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentShape(Rectangle())
+                    .onTapGesture { beginEditing(index) }
+            }
         }
+    }
+
+    private func beginEditing(_ index: Int) {
+        finishEditing()
+        focusedSpeaker = nil
+        editingTurn = index
+    }
+
+    /// Commits whatever segment is open. Trims it, and drops it entirely if it
+    /// was emptied — which doubles as the way to delete a segment.
+    private func finishEditing() {
+        guard let index = editingTurn else { return }
+        model.commitEdit(at: index)
+        editingTurn = nil
+        focusedTurn = nil
     }
 
     @ViewBuilder

@@ -198,6 +198,17 @@ its colours cannot drift apart. **New colours are appended, never inserted** —
 saved transcripts store the raw values, so reordering would recolour every
 speaker on disk. A test pins them.
 
+### Editing the text
+
+Click any segment to edit it. Enter or Escape commits, as does clicking
+anywhere else. Only the segment being edited becomes a text field — hundreds
+of live fields in the list would be a lot to ask of a fanless dual-core, and
+read-only text is also what a find-and-highlight can mark up later.
+
+Emptying a segment deletes it, which is how a stray "Uhum." gets removed. If
+that leaves two adjacent segments by the same speaker they stay separate in
+the data and join on output, exactly as a reassignment does.
+
 ### Fixing what diarization got wrong
 
 Right-click a speaker's name in the transcript to move that one segment to

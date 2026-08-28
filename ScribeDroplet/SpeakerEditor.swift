@@ -42,6 +42,31 @@ enum SpeakerEditor {
         return "speaker_\(index)"
     }
 
+    /// Replaces one segment's text, as it is typed.
+    static func replacingText(_ turns: [SpeakerTurn],
+                              at index: Int,
+                              with text: String) -> [SpeakerTurn] {
+        guard turns.indices.contains(index) else { return turns }
+        var edited = turns
+        edited[index].text = text
+        return edited
+    }
+
+    /// Tidies one segment once editing finishes: surrounding whitespace goes,
+    /// and a segment emptied entirely is removed rather than left as a blank
+    /// row that would export as a speaker name with nothing under it.
+    static func committingText(_ turns: [SpeakerTurn], at index: Int) -> [SpeakerTurn] {
+        guard turns.indices.contains(index) else { return turns }
+        var edited = turns
+        let trimmed = edited[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            edited.remove(at: index)
+        } else {
+            edited[index].text = trimmed
+        }
+        return edited
+    }
+
     /// Detaches every segment belonging to a speaker, leaving them unowned
     /// and therefore shown as "Unknown". Deleting a speaker must never delete
     /// what they said.

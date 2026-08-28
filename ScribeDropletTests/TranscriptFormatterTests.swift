@@ -531,3 +531,75 @@ final class DeletingASpeakerTests: XCTestCase {
         XCTAssertEqual(recovered.map(\.speakerID), ["speaker_1", "speaker_1"])
     }
 }
+
+// MARK: - Editing the text
+
+final class TextEditingTests: XCTestCase {
+
+    private func turn(_ text: String, _ speaker: String?) -> SpeakerTurn {
+        SpeakerTurn(speakerID: speaker, text: text)
+    }
+
+    private var sample: [SpeakerTurn] {
+        [turn("um", "speaker_0"), turn("dois", "speaker_1"), turn("três", "speaker_0")]
+    }
+
+    func testReplacingEditsOnlyThatSegment() {
+        let edited = SpeakerEditor.replacingText(sample, at: 1, with: "DOIS")
+        XCTAssertEqual(edited.map(\.text), ["um", "DOIS", "três"])
+    }
+
+    func testTheSpeakerSurvivesAnEdit() {
+        let edited = SpeakerEditor.replacingText(sample, at: 1, with: "DOIS")
+        XCTAssertEqual(edited.map(\.speakerID), ["speaker_0", "speaker_1", "speaker_0"])
+    }
+
+    func testReplacingOutOfRangeChangesNothing() {
+        XCTAssertEqual(SpeakerEditor.replacingText(sample, at: 9, with: "x"), sample)
+        XCTAssertEqual(SpeakerEditor.replacingText(sample, at: -1, with: "x"), sample)
+    }
+
+    func testCommittingTrimsSurroundingWhitespace() {
+        let typed = SpeakerEditor.replacingText(sample, at: 1, with: "  dois  ")
+        XCTAssertEqual(SpeakerEditor.committingText(typed, at: 1), sample)
+    }
+
+    /// Emptying a segment is how you delete one.
+    func testCommittingAnEmptiedSegmentRemovesIt() {
+        for emptied in ["", "   ", "\n "] {
+            let typed = SpeakerEditor.replacingText(sample, at: 1, with: emptied)
+            XCTAssertEqual(SpeakerEditor.committingText(typed, at: 1),
+                           [turn("um", "speaker_0"), turn("três", "speaker_0")])
+        }
+    }
+
+    func testCommittingOutOfRangeChangesNothing() {
+        XCTAssertEqual(SpeakerEditor.committingText(sample, at: 9), sample)
+    }
+
+    func testCommittingUnchangedTextIsIdentity() {
+        XCTAssertEqual(SpeakerEditor.committingText(sample, at: 0), sample)
+    }
+
+    /// Deleting the middle segment leaves two adjacent segments by the same
+    /// speaker, which the output joins into one block.
+    func testNeighboursJoinOnOutputAfterASegmentIsDeleted() {
+        let typed = SpeakerEditor.replacingText(sample, at: 1, with: "")
+        let after = SpeakerEditor.committingText(typed, at: 1)
+        XCTAssertEqual(TranscriptFormatter.format(turns: after,
+                                                  names: ["speaker_0": "Lilian"],
+                                                  fallbackText: ""),
+                       "Lilian:\num três")
+    }
+
+    func testEditedTextReachesTheMarkdown() {
+        let edited = SpeakerEditor.replacingText([turn("vinte e cinco barra cinco", "speaker_0")],
+                                                 at: 0,
+                                                 with: "vinte barra cinco")
+        XCTAssertEqual(TranscriptFormatter.markdown(title: "",
+                                                    turns: edited,
+                                                    names: ["speaker_0": "Lilian"],
+                                                    fallbackText: ""),
+                       "**Lilian**\nvinte barra cinco\n")
+    }
+}

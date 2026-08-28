@@ -5,7 +5,9 @@ struct SpeakerTurn: Equatable, Codable {
     /// The raw API id, e.g. "speaker_0". Nil when diarization returned nothing.
     /// Mutable because a segment can be reassigned to another speaker.
     var speakerID: String?
-    let text: String
+    /// Mutable because the transcript is editable: Scribe mishears things,
+    /// and a legal transcript has to be correctable.
+    var text: String
 }
 
 /// Turns `words[]` into a speaker-labelled transcript.
