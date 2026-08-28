@@ -9,9 +9,29 @@ transcription happens over an API.
 
 - Deployment target: **macOS 13.0**
 - Architecture: **universal (arm64 + x86_64)**
-- Dependencies: **none.** Foundation, SwiftUI and AppKit only
+- Dependencies: **one** — [Sparkle][sparkle], for updates. Otherwise
+  Foundation, SwiftUI and AppKit only
 - App Sandbox: **off** (personal tool, not an App Store submission)
 - Signing: ad-hoc, "sign to run locally"
+- Licence: MIT
+
+## What you need
+
+- A Mac running **macOS 13 or later**. Intel or Apple Silicon; the build is
+  universal.
+- An **ElevenLabs API key**. Transcription happens on their servers and is
+  billed per hour of audio, so this is not free to run. The app stores the key
+  in your login Keychain and sends it to nobody but ElevenLabs.
+- **Xcode**, to build it. There is no notarised download: the app is ad-hoc
+  signed, so a build fetched from a release needs a right-click → Open the
+  first time, and macOS will be blunt about not recognising the developer.
+  Building it yourself avoids that entirely.
+
+A word on what you are uploading. This sends your audio to a third party, so
+for confidential recordings — the use this was written for — check ElevenLabs'
+retention and training terms against whatever duty of confidentiality you are
+under. The app deliberately keeps no copy of your audio, and transcripts stay
+in your own Application Support folder.
 
 ## Build
 
