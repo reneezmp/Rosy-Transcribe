@@ -34,6 +34,8 @@
 		1B0000000000000000000019 /* TranscriptSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000013 /* TranscriptSearch.swift */; };
 		1B000000000000000000001A /* TranscriptSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000013 /* TranscriptSearch.swift */; };
 		1B000000000000000000001B /* TranscriptSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000014 /* TranscriptSearchTests.swift */; };
+		1B000000000000000000001C /* SegmentTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* SegmentTextView.swift */; };
+		1B000000000000000000001D /* SegmentTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* SegmentTextView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +59,7 @@
 		1A0000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1A0000000000000000000013 /* TranscriptSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSearch.swift; sourceTree = "<group>"; };
 		1A0000000000000000000014 /* TranscriptSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSearchTests.swift; sourceTree = "<group>"; };
+		1A0000000000000000000015 /* SegmentTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentTextView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -101,6 +104,7 @@
 				1A000000000000000000000F /* TranscriptRecord.swift */,
 				1A0000000000000000000011 /* SpeakerEditor.swift */,
 				1A0000000000000000000013 /* TranscriptSearch.swift */,
+				1A0000000000000000000015 /* SegmentTextView.swift */,
 				1A0000000000000000000012 /* Assets.xcassets */,
 			);
 			path = ScribeDroplet;
@@ -236,6 +240,7 @@
 				1B0000000000000000000013 /* TranscriptRecord.swift in Sources */,
 				1B0000000000000000000016 /* SpeakerEditor.swift in Sources */,
 				1B0000000000000000000019 /* TranscriptSearch.swift in Sources */,
+				1B000000000000000000001C /* SegmentTextView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,6 +262,7 @@
 				1B0000000000000000000017 /* SpeakerEditor.swift in Sources */,
 				1B000000000000000000001A /* TranscriptSearch.swift in Sources */,
 				1B000000000000000000001B /* TranscriptSearchTests.swift in Sources */,
+				1B000000000000000000001D /* SegmentTextView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

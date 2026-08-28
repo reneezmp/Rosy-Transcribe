@@ -62,6 +62,7 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 | `TranscriptRecord.swift` | A saved transcript, and the on-disk store |
 | `SpeakerEditor.swift` | Reassigning and editing segments, free of UI |
 | `TranscriptSearch.swift` | Finding text, free of UI |
+| `SegmentTextView.swift` | The editable, selectable, highlightable segment |
 | `KeychainStore.swift` | The API key, and migration off `UserDefaults` |
 
 `TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
@@ -201,10 +202,19 @@ speaker on disk. A test pins them.
 
 ### Editing the text
 
-Click any segment to edit it. Enter or Escape commits, as does clicking
-anywhere else. Only the segment being edited becomes a text field — hundreds
-of live fields in the list would be a lot to ask of a fanless dual-core, and
-read-only text is also what a find-and-highlight can mark up later.
+Every segment is live. Click for a caret, drag to select, type to edit —
+there is no edit mode to enter or leave.
+
+That needs `NSTextView` (`SegmentTextView.swift`), because neither SwiftUI
+control can do it. `Text` is selectable but not editable. `TextField` is
+editable but cannot render highlighted ranges on macOS 13, so find-and-
+highlight would stop working, and each field is its own selection island
+anyway. `NSTextView` does all of it at once, and it is also the groundwork for
+click-a-word-to-play: it can map a point to a character index, which is what
+turning a click into a timestamp will need.
+
+Selection still cannot span two segments — each row is its own text view. Copy
+All and the Markdown export are the way to take the whole transcript.
 
 Emptying a segment deletes it, which is how a stray "Uhum." gets removed. If
 that leaves two adjacent segments by the same speaker they stay separate in

@@ -108,3 +108,58 @@ final class TranscriptSearchTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Highlighting offsets
+
+/// `String.Index` ranges have to become UTF-16 offsets before NSTextView can
+/// use them. Accented characters are where a naive character count goes wrong,
+/// and this app transcribes Portuguese.
+final class HighlightRangeTests: XCTestCase {
+
+    private func nsRange(_ needle: String, in text: String) -> NSRange? {
+        guard let range = text.range(of: needle) else { return nil }
+        return SegmentTextView.nsRange(of: range, in: text)
+    }
+
+    func testPlainASCIIOffsets() {
+        XCTAssertEqual(nsRange("dia", in: "Bom dia"), NSRange(location: 4, length: 3))
+    }
+
+    /// "ç" is one UTF-16 unit, so offsets after it are unshifted...
+    func testOffsetsAfterAPrecomposedAccent() {
+        let text = "averbação vinte"
+        XCTAssertEqual(nsRange("vinte", in: text), NSRange(location: 10, length: 5))
+    }
+
+    func testTheAccentedWordItself() {
+        XCTAssertEqual(nsRange("averbação", in: "essa averbação"), NSRange(location: 5, length: 9))
+    }
+
+    /// ...but an emoji is two, which a character count would get wrong.
+    func testOffsetsAfterASurrogatePair() {
+        let text = "🎤 dia"
+        XCTAssertEqual(nsRange("dia", in: text), NSRange(location: 3, length: 3))
+    }
+
+    func testARangeCoveringTheWholeString() {
+        let text = "João"
+        XCTAssertEqual(nsRange("João", in: text), NSRange(location: 0, length: 4))
+    }
+
+    /// Every range the search produces must convert, and must convert back to
+    /// the same text.
+    func testEverySearchMatchConvertsCleanly() throws {
+        let text = "essa averbação, essa ineficácia, essa citação"
+        let turns = [SpeakerTurn(speakerID: "speaker_0", text: text)]
+        let matches = TranscriptSearch.matches(for: "essa", in: turns)
+        XCTAssertEqual(matches.count, 3)
+
+        let utf16 = Array(text.utf16)
+        for match in matches {
+            let range = try XCTUnwrap(SegmentTextView.nsRange(of: match.range, in: text))
+            XCTAssertLessThanOrEqual(NSMaxRange(range), utf16.count)
+            let slice = String(decoding: utf16[range.location..<NSMaxRange(range)], as: UTF16.self)
+            XCTAssertEqual(slice, "essa")
+        }
+    }
+}

@@ -544,8 +544,6 @@ struct ContentView: View {
     @State private var isKeyVisible = false
     @State private var hoveredSpeaker: String?
     @FocusState private var focusedSpeaker: String?
-    @State private var editingTurn: Int?
-    @FocusState private var focusedTurn: Int?
     @State private var isSearching = false
     @FocusState private var searchFocused: Bool
 
@@ -564,7 +562,6 @@ struct ContentView: View {
     /// ⌘F on an open bar re-focuses it rather than closing it, which is what
     /// every other macOS app does.
     private func openSearch() {
-        finishEditing()
         isSearching = true
         searchFocused = true
     }
@@ -658,10 +655,7 @@ struct ContentView: View {
         .background(
             Color.clear
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    focusedSpeaker = nil
-                    finishEditing()
-                }
+                .onTapGesture { focusedSpeaker = nil }
         )
         // Rosy's screen is 1280x800, which leaves roughly 720pt once the menu
         // bar and the title bar are gone. A 700pt minimum plus padding was
@@ -967,27 +961,6 @@ struct ContentView: View {
         withAnimation { proxy.scrollTo(matches[model.clampedMatch].turnIndex, anchor: .center) }
     }
 
-    /// Marks up one segment's matches. The current one is solid, the rest are
-    /// tinted, so it is obvious which of seventeen hits you are looking at.
-    private func highlighted(_ text: String,
-                             ranges: [Range<String.Index>],
-                             current: Range<String.Index>?) -> AttributedString {
-        var attributed = AttributedString(text)
-        for range in ranges {
-            let offset = text.distance(from: text.startIndex, to: range.lowerBound)
-            let length = text.distance(from: range.lowerBound, to: range.upperBound)
-            guard length > 0 else { continue }
-            let lower = attributed.index(attributed.startIndex, offsetByCharacters: offset)
-            let upper = attributed.index(lower, offsetByCharacters: length)
-            if range == current {
-                attributed[lower..<upper].backgroundColor = .orange
-                attributed[lower..<upper].foregroundColor = .black
-            } else {
-                attributed[lower..<upper].backgroundColor = Color.yellow.opacity(0.35)
-            }
-        }
-        return attributed
-    }
 
     // SwiftUI can evaluate a row for an index that has just gone away: editing
     // can delete a segment, and `ForEach` over indices only notices on the
@@ -1001,10 +974,9 @@ struct ContentView: View {
 
             // The name is repeated on every segment, including where the
             // segment above has the same speaker. This view is an editor of
-            // segments, and a blank name did two bad things: it made two
-            // segments look like one merged block, and it hid the fact that
-            // the blank space is itself right-clickable. Joining adjacent
-            // segments is an output concern, and stays in
+            // segments, and a blank name made two segments look like one
+            // merged block while hiding that the space is right-clickable.
+            // Joining adjacent segments is an output concern and stays in
             // `TranscriptFormatter.merged`.
             HStack(alignment: .top, spacing: 10) {
                 Text(model.displayName(for: turn.speakerID))
@@ -1019,64 +991,24 @@ struct ContentView: View {
                     .contentShape(Rectangle())
                     .contextMenu { reassignmentMenu(for: index) }
 
-                if editingTurn == index {
-                    // A plain field, styled to match the text it replaces, so
-                    // the line does not jump when it swaps in.
-                    TextField("", text: model.textBinding(at: index), axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.system(.body, design: .monospaced))
-                        .focused($focusedTurn, equals: index)
-                        .onAppear { focusedTurn = index }
-                        .onSubmit { finishEditing() }
-                        .onExitCommand { finishEditing() }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    // Click to edit. Only the segment under the pointer
-                    // becomes a field: hundreds of live text fields would be a
-                    // lot to ask of a fanless dual-core, and read-only text is
-                    // also the only thing find-and-highlight can mark up.
-                    // The AttributedString is built only where something
-                    // matched, so the markup is paid for only while searching.
-                    Group {
-                        if highlights.isEmpty {
-                            Text(turn.text)
-                        } else {
-                            Text(highlighted(turn.text, ranges: highlights, current: current))
-                        }
-                    }
-                    .font(.system(.body, design: .monospaced))
+                // Always live: click for a caret, drag to select, type to
+                // edit, and search matches stay highlighted throughout.
+                SegmentTextView(text: model.textBinding(at: index),
+                                font: Self.transcriptFont,
+                                textColor: .labelColor,
+                                highlights: highlights,
+                                currentHighlight: current,
+                                onEditingEnded: { model.commitEdit(at: index) })
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentShape(Rectangle())
-                    .onTapGesture { beginEditing(index) }
-                }
             }
         }
     }
 
-    private func beginEditing(_ index: Int) {
-        // Committing the previous edit can delete an emptied segment, which
-        // shifts everything after it up by one. Without this, clicking a later
-        // segment would open the wrong one — or nothing.
-        let removed = finishEditing()
-        focusedSpeaker = nil
+    /// Matched to `.system(.body, design: .monospaced)` on the name column, so
+    /// the two halves of a row sit on the same baseline.
+    private static let transcriptFont = NSFont.monospacedSystemFont(
+        ofSize: NSFont.systemFontSize, weight: .regular)
 
-        var target = index
-        if let removed, removed < index { target -= 1 }
-        guard model.turns.indices.contains(target) else { return }
-        editingTurn = target
-    }
-
-    /// Commits whatever segment is open. Trims it, and drops it entirely if it
-    /// was emptied — which doubles as the way to delete a segment.
-    @discardableResult
-    private func finishEditing() -> Int? {
-        guard let index = editingTurn else { return nil }
-        let removed = model.commitEdit(at: index)
-        editingTurn = nil
-        focusedTurn = nil
-        return removed ? index : nil
-    }
 
     @ViewBuilder
     private func reassignmentMenu(for index: Int) -> some View {
