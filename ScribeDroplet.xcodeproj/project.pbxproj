@@ -36,6 +36,7 @@
 		1B000000000000000000001B /* TranscriptSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000014 /* TranscriptSearchTests.swift */; };
 		1B000000000000000000001C /* SegmentTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* SegmentTextView.swift */; };
 		1B000000000000000000001D /* SegmentTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* SegmentTextView.swift */; };
+		1B000000000000000000001E /* UpdaterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000016 /* UpdaterService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +61,7 @@
 		1A0000000000000000000013 /* TranscriptSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSearch.swift; sourceTree = "<group>"; };
 		1A0000000000000000000014 /* TranscriptSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSearchTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000000015 /* SegmentTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentTextView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000016 /* UpdaterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,6 +107,7 @@
 				1A0000000000000000000011 /* SpeakerEditor.swift */,
 				1A0000000000000000000013 /* TranscriptSearch.swift */,
 				1A0000000000000000000015 /* SegmentTextView.swift */,
+				1A0000000000000000000016 /* UpdaterService.swift */,
 				1A0000000000000000000012 /* Assets.xcassets */,
 			);
 			path = ScribeDroplet;
@@ -241,6 +244,7 @@
 				1B0000000000000000000016 /* SpeakerEditor.swift in Sources */,
 				1B0000000000000000000019 /* TranscriptSearch.swift in Sources */,
 				1B000000000000000000001C /* SegmentTextView.swift in Sources */,
+				1B000000000000000000001E /* UpdaterService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -323,7 +327,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
@@ -336,7 +340,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDroplet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -351,7 +355,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
@@ -364,7 +368,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDroplet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -378,10 +382,10 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDropletTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -395,10 +399,10 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDropletTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

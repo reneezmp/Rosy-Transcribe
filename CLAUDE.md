@@ -15,8 +15,14 @@ Portuguese-language legal meetings.
   on the machine it exists for. `build.sh` refuses to proceed if the installed
   Xcode can no longer target 13.0, and verifies both slices against the built
   Mach-O afterwards.
-- **No dependencies.** Foundation, SwiftUI, AppKit, Security, UniformTypeIdentifiers.
-  No SPM packages.
+- **One dependency, deliberately: Sparkle.** Otherwise Foundation, SwiftUI,
+  AppKit, Security, UniformTypeIdentifiers and nothing else. Sparkle was taken
+  on knowingly — replacing a running application is hard to get right, and the
+  alternative was hand-rolling the download, signature check, atomic swap and
+  relaunch. Do not add a second package without asking.
+- **`UpdaterService.swift` is wrapped in `#if canImport(Sparkle)`.** The app
+  builds and runs without the package; updating is simply absent. Keep it that
+  way, so a checkout that has not resolved packages still compiles.
 - **App Sandbox off**, ad-hoc signing ("sign to run locally"). The app is
   installed by copying the `.app` across and right-click → Open once.
 - **Performance target is the 2017 dual-core Intel machine**, not the M4 it is
@@ -29,6 +35,7 @@ Portuguese-language legal meetings.
 ./build.sh                          # preflight, tests, universal Release, verify
 python3 Tools/validate_pbxproj.py   # after any hand-edit of the project file
 python3 Tools/make_icon.py          # regenerate the app icon
+./Tools/release.sh                  # build, zip, sign, print the appcast entry
 ```
 
 Tests, without the full build:
@@ -161,6 +168,13 @@ When it is built, **bind seeking to ⌥-click or a per-segment play button, not
 double-click** — double-click already means "select word" to the system, and
 fighting that breaks ordinary text behaviour. `SegmentTextView` is `NSTextView`
 partly so this is possible: it can map a click point to a character index.
+
+**Publishing an update.** `Tools/release.sh` does the build, the zip and the
+signature; it then prints an `<item>` to paste into `appcast.xml`. Both halves
+are required — the appcast is what the app reads, the GitHub release is where
+the file it names actually lives. Bump `MARKETING_VERSION` *and*
+`CURRENT_PROJECT_VERSION` first: Sparkle orders updates by `CFBundleVersion`,
+so a build that does not increase is a build nobody is ever offered.
 
 **A real icon.** The current one is a placeholder — `Tools/make_icon.py` draws
 it from a handful of constants at the top of the file.

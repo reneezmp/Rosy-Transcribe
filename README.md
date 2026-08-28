@@ -328,6 +328,50 @@ anti-aliasing at every size from one sample per pixel, using only `zlib` and
 `struct`. Edit the constants at the top of the script and re-run it to change
 the colours or the proportions.
 
+## Updates
+
+The app checks GitHub for a newer build on launch, and on demand from
+**Scribe Droplet ▸ Check for Updates…**. It uses [Sparkle][sparkle], the one
+third-party dependency in the project, taken on deliberately: replacing a
+running application is hard to get right, and the alternative was hand-rolling
+the download, signature check, atomic swap and relaunch — the part where a bug
+eats the app.
+
+`UpdaterService.swift` sits behind `#if canImport(Sparkle)`, so the app builds
+and runs without the package. Updating is simply absent until it is added.
+
+[sparkle]: https://sparkle-project.org
+
+### First-time setup
+
+1. In Xcode: **File ▸ Add Package Dependencies…**, enter
+   `https://github.com/sparkle-project/Sparkle`, add it to the **ScribeDroplet**
+   target. (Doing this in Xcode rather than by hand-editing the project file is
+   deliberate — Xcode writes the package entries correctly.)
+2. Find `generate_keys` in the downloaded package's `bin` directory and run it.
+   It puts a private key in your login Keychain and prints a public key.
+3. Put that public key in the project's `INFOPLIST_KEY_SUPublicEDKey` build
+   setting, for both Debug and Release.
+
+The private key never leaves your Keychain. Anyone can read the appcast; only
+someone holding that key can publish an update the app will accept.
+
+### Publishing one
+
+```sh
+./Tools/release.sh
+```
+
+It builds, zips with `ditto` (a plain `zip` mangles an `.app`), signs the zip,
+and prints the `<item>` to paste into `appcast.xml`. Then commit the appcast
+and create the GitHub release with the zip attached — both halves are needed,
+since the appcast is what the app reads and the release is where the file it
+names lives.
+
+Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` before running it.
+Sparkle orders updates by `CFBundleVersion`, so a build that does not increase
+is a build nobody is ever offered.
+
 ## Not in v1 or v2, deliberately
 
 A settings screen, SRT output, progress percentage, audio playback.

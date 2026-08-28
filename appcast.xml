@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The update feed. Sparkle in the app reads this over
+  raw.githubusercontent.com, so publishing an update means committing a new
+  <item> here and pushing to main.
+
+  Do not write an <item> by hand. `Tools/release.sh` builds the app, zips it,
+  signs the zip with the private EdDSA key, and prints the exact block to
+  paste in — the signature and length have to match the uploaded file byte for
+  byte or Sparkle will refuse the update, which is the entire point of them.
+
+  Newest item first. Old items can stay: Sparkle picks the highest version it
+  can run, which is how someone several versions behind still lands on the
+  latest.
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Scribe Droplet</title>
+    <link>https://raw.githubusercontent.com/reneezmp/RosyTranscriber/main/appcast.xml</link>
+    <description>Updates for Scribe Droplet</description>
+    <language>en</language>
+
+    <!-- No releases published yet. Run Tools/release.sh and paste its output here. -->
+
+  </channel>
+</rss>
