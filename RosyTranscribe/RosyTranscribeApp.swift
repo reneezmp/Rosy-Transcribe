@@ -1,12 +1,12 @@
 import SwiftUI
 
 @main
-struct ScribeDropletApp: App {
+struct RosyTranscribeApp: App {
 
     @StateObject private var updater = UpdaterService()
 
     var body: some Scene {
-        WindowGroup("Scribe Droplet") {
+        WindowGroup("Rosy Transcribe") {
             ContentView()
                 .task {
                     // Quietly, on launch. A dialog every time you open a

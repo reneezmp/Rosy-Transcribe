@@ -6,9 +6,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "1E0000000000000000000001"
-               BuildableName = "ScribeDroplet.app"
-               BlueprintName = "ScribeDroplet"
-               ReferencedContainer = "container:ScribeDroplet.xcodeproj">
+               BuildableName = "RosyTranscribe.app"
+               BlueprintName = "RosyTranscribe"
+               ReferencedContainer = "container:RosyTranscribe.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -19,9 +19,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "1E0000000000000000000002"
-               BuildableName = "ScribeDropletTests.xctest"
-               BlueprintName = "ScribeDropletTests"
-               ReferencedContainer = "container:ScribeDroplet.xcodeproj">
+               BuildableName = "RosyTranscribeTests.xctest"
+               BlueprintName = "RosyTranscribeTests"
+               ReferencedContainer = "container:RosyTranscribe.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -31,9 +31,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1E0000000000000000000001"
-            BuildableName = "ScribeDroplet.app"
-            BlueprintName = "ScribeDroplet"
-            ReferencedContainer = "container:ScribeDroplet.xcodeproj">
+            BuildableName = "RosyTranscribe.app"
+            BlueprintName = "RosyTranscribe"
+            ReferencedContainer = "container:RosyTranscribe.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -42,9 +42,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1E0000000000000000000001"
-            BuildableName = "ScribeDroplet.app"
-            BlueprintName = "ScribeDroplet"
-            ReferencedContainer = "container:ScribeDroplet.xcodeproj">
+            BuildableName = "RosyTranscribe.app"
+            BlueprintName = "RosyTranscribe"
+            ReferencedContainer = "container:RosyTranscribe.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

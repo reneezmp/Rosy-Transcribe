@@ -104,11 +104,13 @@ final class TranscriberModel: ObservableObject {
         self.language = TranscriptionLanguage(rawValue: defaults.string(forKey: DefaultsKey.language) ?? "")
             ?? .portuguese
         self.keytermsText = defaults.string(forKey: DefaultsKey.keyterms) ?? ""
+        TranscriptStore.migrateRenamedDirectory()
         self.records = store.load()
 
-        // v1 stored the key in UserDefaults. Move it across and delete the
-        // plist copy. Assigning in init does not fire didSet, which is what
-        // we want: this is a load, not an edit.
+        // Both migrations run before anything reads either location. The
+        // rename one first: it is the app inheriting from its own former
+        // name, and the UserDefaults one should see the result.
+        KeychainStore.migrateRenamedServiceIfNeeded()
         KeychainStore.migrateLegacyKeyIfNeeded(defaults: defaults)
         do {
             self.apiKey = try KeychainStore.read() ?? ""

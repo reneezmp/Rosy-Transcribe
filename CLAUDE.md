@@ -41,16 +41,16 @@ python3 Tools/make_icon.py          # regenerate the app icon
 Tests, without the full build:
 
 ```sh
-xcodebuild test -project ScribeDroplet.xcodeproj -scheme ScribeDroplet \
+xcodebuild test -project RosyTranscribe.xcodeproj -scheme RosyTranscribe \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
 ```
 
 A single class or case:
 
 ```sh
-xcodebuild test -project ScribeDroplet.xcodeproj -scheme ScribeDroplet \
+xcodebuild test -project RosyTranscribe.xcodeproj -scheme RosyTranscribe \
   -destination 'platform=macOS' \
-  -only-testing:ScribeDropletTests/TranscriptSearchTests/testSearchIsDiacriticInsensitive
+  -only-testing:RosyTranscribeTests/TranscriptSearchTests/testSearchIsDiacriticInsensitive
 ```
 
 ## Architecture
@@ -125,15 +125,28 @@ data already on users' disks.
     editing and search highlighting simultaneously — and it is the groundwork
     for click-a-word-to-seek.
 
-## Renaming the app
+## The rename, and the two strings that carry data
 
-A rename is planned. Two strings are **not** cosmetic:
+The app was **Scribe Droplet** until it became **Rosy Transcribe**. Two strings
+in that rename were not cosmetic, because they name where user data lives:
 
-- `com.rosy.ScribeDroplet` — the Keychain service holding the API key
-- `~/Library/Application Support/ScribeDroplet/Transcripts/` — the library
+- `com.rosy.RosyTranscribe` — the Keychain service holding the API key
+- `~/Library/Application Support/RosyTranscribe/Transcripts/` — the library
 
-Changing either during a find-and-replace makes the app launch clean and empty:
-no key, no transcripts. Keep them, or write a migration deliberately.
+Changing either without a migration makes the app launch clean and empty: no
+key, no transcripts, nothing obviously broken. Both migrations exist and run
+once at startup, before anything reads either location:
+
+- `KeychainStore.migrateRenamedServiceIfNeeded()` — copies the key from
+  `com.rosy.ScribeDroplet` only if the current service holds nothing.
+- `TranscriptStore.migrateRenamedDirectory(from:to:)` — moves the library only
+  if the destination does not exist, so it can never merge two libraries or
+  overwrite newer transcripts with older ones. Tested.
+
+**Leave both in place.** They are cheap, they run once, and deleting them
+orphans the data of anyone still on a pre-rename build. If the app is ever
+renamed again, add a third migration rather than editing these — each one
+knows exactly which past name it inherits from.
 
 ## Working in a cloud session
 

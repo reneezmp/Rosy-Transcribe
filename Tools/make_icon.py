@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates the Scribe Droplet app icon.
+"""Generates the Rosy Transcribe app icon.
 
 No image library is used, and none is needed. Every shape is a signed
 distance function, so a pixel's coverage is read straight off the distance
@@ -10,7 +10,7 @@ Run from the repository root:
 
     python3 Tools/make_icon.py
 
-It rewrites ScribeDroplet/Assets.xcassets/AppIcon.appiconset in place.
+It rewrites RosyTranscribe/Assets.xcassets/AppIcon.appiconset in place.
 """
 
 import json
@@ -19,7 +19,7 @@ import struct
 import zlib
 from math import hypot
 
-OUT = os.path.join("ScribeDroplet", "Assets.xcassets", "AppIcon.appiconset")
+OUT = os.path.join("RosyTranscribe", "Assets.xcassets", "AppIcon.appiconset")
 
 # Rose gold, light at the top-left falling to a deeper rose at the bottom-right.
 TOP = (0xF9, 0xD5, 0xC9)

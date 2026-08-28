@@ -92,11 +92,44 @@ struct TranscriptStore {
     }
 
     static func defaultDirectory() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return base
+        applicationSupport()
+            .appendingPathComponent("RosyTranscribe", isDirectory: true)
+            .appendingPathComponent("Transcripts", isDirectory: true)
+    }
+
+    /// Where the library lived while the app was called Scribe Droplet.
+    static func legacyDirectory() -> URL {
+        applicationSupport()
             .appendingPathComponent("ScribeDroplet", isDirectory: true)
             .appendingPathComponent("Transcripts", isDirectory: true)
+    }
+
+    private static func applicationSupport() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+    }
+
+    /// Moves the library across after the rename.
+    ///
+    /// Only when the destination does not exist yet, so it can never merge
+    /// two libraries or overwrite newer transcripts with older ones. Failing
+    /// is not fatal: the old folder simply stays where it is, and nothing is
+    /// lost — which is why this reports rather than throws.
+    @discardableResult
+    static func migrateRenamedDirectory(from legacy: URL = legacyDirectory(),
+                                        to destination: URL = defaultDirectory()) -> Bool {
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: legacy.path),
+              !manager.fileExists(atPath: destination.path) else { return false }
+        do {
+            try manager.createDirectory(at: destination.deletingLastPathComponent(),
+                                        withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+            try manager.moveItem(at: legacy, to: destination)
+            return true
+        } catch {
+            return false
+        }
     }
 
     private var encoder: JSONEncoder {

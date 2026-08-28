@@ -13,13 +13,17 @@ import Security
 /// "it reads and writes one string".
 enum KeychainStore {
 
-    static let service = "com.rosy.ScribeDroplet"
+    static let service = "com.rosy.RosyTranscribe"
     static let account = "elevenlabs-api-key"
+
+    /// The service this app used while it was called Scribe Droplet. Anyone
+    /// who ran that build has their key filed under this name.
+    static let legacyService = "com.rosy.ScribeDroplet"
 
     /// Key under which v1 stored the API key in UserDefaults.
     static let legacyDefaultsKey = "elevenLabsAPIKey"
 
-    private static var baseQuery: [String: Any] {
+    private static func baseQuery(service: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -27,8 +31,8 @@ enum KeychainStore {
         ]
     }
 
-    static func read() throws -> String? {
-        var query = baseQuery
+    static func read(service: String = service) throws -> String? {
+        var query = baseQuery(service: service)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -46,17 +50,17 @@ enum KeychainStore {
         }
     }
 
-    static func save(_ value: String) throws {
+    static func save(_ value: String, service: String = service) throws {
         let data = Data(value.utf8)
 
         // Update first: the common case after the very first launch.
-        let updateStatus = SecItemUpdate(baseQuery as CFDictionary,
+        let updateStatus = SecItemUpdate(baseQuery(service: service) as CFDictionary,
                                          [kSecValueData as String: data] as CFDictionary)
         switch updateStatus {
         case errSecSuccess:
             return
         case errSecItemNotFound:
-            var attributes = baseQuery
+            var attributes = baseQuery(service: service)
             attributes[kSecValueData as String] = data
             // The key is only needed while the user is using the app, so it
             // does not need to be readable before first unlock.
@@ -70,10 +74,29 @@ enum KeychainStore {
         }
     }
 
-    static func delete() throws {
-        let status = SecItemDelete(baseQuery as CFDictionary)
+    static func delete(service: String = service) throws {
+        let status = SecItemDelete(baseQuery(service: service) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(status)
+        }
+    }
+
+    /// Moves the key across from the name the app used before it was
+    /// renamed. Runs before the UserDefaults migration, and only when the
+    /// current service holds nothing, so it can never overwrite a newer key.
+    @discardableResult
+    static func migrateRenamedServiceIfNeeded() -> Bool {
+        do {
+            guard try read() == nil else { return false }
+            guard let inherited = try read(service: legacyService),
+                  !inherited.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return false
+            }
+            try save(inherited)
+            try delete(service: legacyService)
+            return true
+        } catch {
+            return false
         }
     }
 

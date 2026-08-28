@@ -40,7 +40,7 @@ struct MultipartBuilder {
     }
 
     static func randomBoundary() -> String {
-        "ScribeDroplet-\(UUID().uuidString)"
+        "RosyTranscribe-\(UUID().uuidString)"
     }
 
     var contentType: String {

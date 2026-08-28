@@ -167,7 +167,7 @@ final class TranscriptStoreTests: XCTestCase {
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ScribeDropletTests-\(UUID().uuidString)")
+            .appendingPathComponent("RosyTranscribeTests-\(UUID().uuidString)")
         store = TranscriptStore(directory: directory)
     }
 
@@ -263,6 +263,66 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(loaded.speakerColors["speaker_1"], .orange)
         XCTAssertEqual(loaded.turns, original.turns)
         XCTAssertEqual(loaded.detectedLanguage, "por (100% confidence)")
+    }
+
+    // MARK: - Migrating after the rename
+
+    /// The app was called Scribe Droplet. Anyone who ran that build has their
+    /// library under the old folder, and would otherwise open a renamed app to
+    /// an empty sidebar.
+    func testTheLibraryMovesAcrossFromTheOldFolder() throws {
+        let legacy = directory.appendingPathComponent("ScribeDroplet/Transcripts")
+        let destination = directory.appendingPathComponent("RosyTranscribe/Transcripts")
+        let old = TranscriptStore(directory: legacy)
+        try old.save(record("Reunião", at: 1_700_000_000))
+
+        XCTAssertTrue(TranscriptStore.migrateRenamedDirectory(from: legacy, to: destination))
+
+        XCTAssertEqual(TranscriptStore(directory: destination).load().map(\.title), ["Reunião"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path))
+    }
+
+    /// It must never merge two libraries or overwrite newer transcripts with
+    /// older ones, so an existing destination stops it dead.
+    func testAnExistingLibraryIsNeverOverwritten() throws {
+        let legacy = directory.appendingPathComponent("ScribeDroplet/Transcripts")
+        let destination = directory.appendingPathComponent("RosyTranscribe/Transcripts")
+        try TranscriptStore(directory: legacy).save(record("old", at: 1_000))
+        try TranscriptStore(directory: destination).save(record("current", at: 2_000))
+
+        XCTAssertFalse(TranscriptStore.migrateRenamedDirectory(from: legacy, to: destination))
+
+        XCTAssertEqual(TranscriptStore(directory: destination).load().map(\.title), ["current"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacy.path),
+                      "the old folder is left alone rather than silently discarded")
+    }
+
+    func testNothingToMigrateIsNotAnError() {
+        let legacy = directory.appendingPathComponent("ScribeDroplet/Transcripts")
+        let destination = directory.appendingPathComponent("RosyTranscribe/Transcripts")
+        XCTAssertFalse(TranscriptStore.migrateRenamedDirectory(from: legacy, to: destination))
+    }
+
+    /// A fresh install must not inherit anything, and must not crash looking.
+    func testMigrationIsIdempotent() throws {
+        let legacy = directory.appendingPathComponent("ScribeDroplet/Transcripts")
+        let destination = directory.appendingPathComponent("RosyTranscribe/Transcripts")
+        try TranscriptStore(directory: legacy).save(record("Reunião", at: 1_700_000_000))
+
+        XCTAssertTrue(TranscriptStore.migrateRenamedDirectory(from: legacy, to: destination))
+        XCTAssertFalse(TranscriptStore.migrateRenamedDirectory(from: legacy, to: destination))
+        XCTAssertEqual(TranscriptStore(directory: destination).load().count, 1)
+    }
+
+    func testTheMigratedFolderKeepsItsPermissions() throws {
+        let legacy = directory.appendingPathComponent("ScribeDroplet/Transcripts")
+        let destination = directory.appendingPathComponent("RosyTranscribe/Transcripts")
+        try TranscriptStore(directory: legacy).save(record("Reunião", at: 1_700_000_000))
+        XCTAssertTrue(TranscriptStore.migrateRenamedDirectory(from: legacy, to: destination))
+
+        let mode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: destination.path)[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(mode.int16Value, 0o700)
     }
 
     /// Privileged legal material should not be world-readable.

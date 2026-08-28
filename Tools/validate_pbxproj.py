@@ -1,4 +1,4 @@
-"""Checks ScribeDroplet.xcodeproj/project.pbxproj is well formed.
+"""Checks RosyTranscribe.xcodeproj/project.pbxproj is well formed.
 
 The project file is edited by hand -- cloud sessions have no Xcode -- and a
 mistake there is not a compile error, it is an Xcode that refuses to open the
@@ -12,7 +12,7 @@ Run from the repository root:
 
 import re, sys
 
-SRC = open("ScribeDroplet.xcodeproj/project.pbxproj").read()
+SRC = open("RosyTranscribe.xcodeproj/project.pbxproj").read()
 
 class P:
     def __init__(s, t): s.t=t; s.i=0

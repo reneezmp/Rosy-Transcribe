@@ -1,15 +1,15 @@
 #!/bin/bash
 #
-# Builds Scribe Droplet as a universal (arm64 + x86_64) app for macOS 13.0,
+# Builds Rosy Transcribe as a universal (arm64 + x86_64) app for macOS 13.0,
 # and proves it — an app that cannot launch on Rosy is a silent failure, so
 # every claim this script makes is checked against the built binary.
 #
-# Run on the M4. Copy build/ScribeDroplet.app to the target machine.
+# Run on the M4. Copy build/RosyTranscribe.app to the target machine.
 
 set -euo pipefail
 
-PROJECT="ScribeDroplet.xcodeproj"
-SCHEME="ScribeDroplet"
+PROJECT="RosyTranscribe.xcodeproj"
+SCHEME="RosyTranscribe"
 CONFIG="Release"
 REQUIRED_TARGET="13.0"
 DERIVED="$(pwd)/.build/DerivedData"
@@ -81,11 +81,11 @@ xcodebuild build \
     MACOSX_DEPLOYMENT_TARGET="$REQUIRED_TARGET" \
     | tail -20
 
-APP="$DERIVED/Build/Products/$CONFIG/ScribeDroplet.app"
+APP="$DERIVED/Build/Products/$CONFIG/RosyTranscribe.app"
 [ -d "$APP" ] || die "Build reported success but $APP does not exist."
 cp -R "$APP" "$OUT/"
-APP="$OUT/ScribeDroplet.app"
-BIN="$APP/Contents/MacOS/ScribeDroplet"
+APP="$OUT/RosyTranscribe.app"
+BIN="$APP/Contents/MacOS/RosyTranscribe"
 
 # ---------------------------------------------------------------------------
 say "Verifying the built binary"
@@ -119,5 +119,5 @@ codesign -dv "$APP" 2>&1 | sed 's/^/  /' || true
 say "Done"
 echo "App: $APP"
 echo
-echo "To install on Rosy: copy ScribeDroplet.app across, then right-click -> Open"
+echo "To install on Rosy: copy RosyTranscribe.app across, then right-click -> Open"
 echo "the first time (it is signed to run locally, not notarised)."

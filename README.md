@@ -1,4 +1,4 @@
-# Scribe Droplet
+# Rosy Transcribe
 
 A small macOS app that takes a dropped audio file, sends it to the ElevenLabs
 Scribe API, and shows a speaker-labelled transcript you can copy in one click.
@@ -47,13 +47,13 @@ verifies against the built Mach-O that both slices are present and that neither
 is stamped with a minimum OS above 13.0. An app that cannot launch on Rosy is a
 silent failure, so none of those claims are taken on trust.
 
-Output lands in `build/ScribeDroplet.app`.
+Output lands in `build/RosyTranscribe.app`.
 
-You can also just open `ScribeDroplet.xcodeproj` and hit Run.
+You can also just open `RosyTranscribe.xcodeproj` and hit Run.
 
 ## Install on Rosy
 
-Copy `ScribeDroplet.app` across, then **right-click → Open** the first time.
+Copy `RosyTranscribe.app` across, then **right-click → Open** the first time.
 The app is signed to run locally, not notarised, so a plain double-click will
 be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 
@@ -71,7 +71,7 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 
 | File | Responsibility |
 |---|---|
-| `ScribeDropletApp.swift` | `@main`, a single window |
+| `RosyTranscribeApp.swift` | `@main`, a single window |
 | `ContentView.swift` | The whole UI, plus the `@MainActor` view model |
 | `TranscriptionService.swift` | The API call, timeouts, and error mapping |
 | `MultipartBuilder.swift` | The `multipart/form-data` encoder |
@@ -87,7 +87,7 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 
 `TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
 networking types, which is what makes them testable without an API key.
-`ScribeDropletTests` covers all three, plus response decoding and the
+`RosyTranscribeTests` covers all three, plus response decoding and the
 HTTP-status → message mapping.
 
 ### The API request
@@ -163,7 +163,7 @@ that exercises the actual constraint.
 
 ## The API key
 
-The key lives in the login Keychain, under service `com.rosy.ScribeDroplet`.
+The key lives in the login Keychain, under service `com.rosy.RosyTranscribe`.
 v1 kept it in `UserDefaults` — a plist any process running as you can read —
 and `KeychainStore.migrateLegacyKeyIfNeeded()` moves an old key across on
 first launch and deletes the plist copy. That migration only removes the copy
@@ -300,7 +300,7 @@ lot of file I/O on a 2017 dual-core.
 Transcripts live in:
 
 ```
-~/Library/Application Support/ScribeDroplet/Transcripts/<uuid>.json
+~/Library/Application Support/RosyTranscribe/Transcripts/<uuid>.json
 ```
 
 One pretty-printed JSON file each, rather than a single library file. A write
@@ -335,7 +335,7 @@ you have typed one.
 ## The icon
 
 Rose gold, with a microphone. **A placeholder** until there is a real one. `Tools/make_icon.py` draws it and writes the ten
-PNGs of `ScribeDroplet/Assets.xcassets/AppIcon.appiconset`:
+PNGs of `RosyTranscribe/Assets.xcassets/AppIcon.appiconset`:
 
 ```sh
 python3 Tools/make_icon.py
@@ -351,7 +351,7 @@ the colours or the proportions.
 ## Updates
 
 The app checks GitHub for a newer build on launch, and on demand from
-**Scribe Droplet ▸ Check for Updates…**. It uses [Sparkle][sparkle], the one
+**Rosy Transcribe ▸ Check for Updates…**. It uses [Sparkle][sparkle], the one
 third-party dependency in the project, taken on deliberately: replacing a
 running application is hard to get right, and the alternative was hand-rolling
 the download, signature check, atomic swap and relaunch — the part where a bug
@@ -365,7 +365,7 @@ and runs without the package. Updating is simply absent until it is added.
 ### First-time setup
 
 1. In Xcode: **File ▸ Add Package Dependencies…**, enter
-   `https://github.com/sparkle-project/Sparkle`, add it to the **ScribeDroplet**
+   `https://github.com/sparkle-project/Sparkle`, add it to the **RosyTranscribe**
    target. (Doing this in Xcode rather than by hand-editing the project file is
    deliberate — Xcode writes the package entries correctly.)
 2. Find `generate_keys` in the downloaded package's `bin` directory and run it.

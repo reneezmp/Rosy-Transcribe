@@ -13,8 +13,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PROJECT="ScribeDroplet.xcodeproj"
-REPO="reneezmp/RosyTranscriber"
+PROJECT="RosyTranscribe.xcodeproj"
+REPO="reneezmp/Rosy-Transcribe"
 DERIVED="$(pwd)/.build/DerivedData"
 
 say() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
@@ -23,7 +23,7 @@ die() { printf '\n\033[31mERROR: %s\033[0m\n' "$1" >&2; exit 1; }
 # ---------------------------------------------------------------------------
 say "Version"
 # ---------------------------------------------------------------------------
-settings="$(xcodebuild -project "$PROJECT" -target ScribeDroplet -showBuildSettings 2>/dev/null)"
+settings="$(xcodebuild -project "$PROJECT" -target RosyTranscribe -showBuildSettings 2>/dev/null)"
 SHORT="$(echo "$settings" | awk -F' = ' '/ MARKETING_VERSION /{print $2; exit}')"
 BUILD="$(echo "$settings" | awk -F' = ' '/ CURRENT_PROJECT_VERSION /{print $2; exit}')"
 [ -n "$SHORT" ] && [ -n "$BUILD" ] || die "Could not read the version from the project."
@@ -41,10 +41,10 @@ say "Building"
 # ---------------------------------------------------------------------------
 ./build.sh
 
-APP="build/ScribeDroplet.app"
+APP="build/RosyTranscribe.app"
 [ -d "$APP" ] || die "build.sh did not produce $APP"
 
-ZIP="build/ScribeDroplet-$SHORT.zip"
+ZIP="build/RosyTranscribe-$SHORT.zip"
 rm -f "$ZIP"
 # ditto, not zip: an .app is a bundle with symlinks and permissions that a
 # plain zip mangles.
@@ -80,7 +80,7 @@ cat <<XML
       <sparkle:shortVersionString>$SHORT</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/$REPO/releases/download/v$SHORT/ScribeDroplet-$SHORT.zip"
+        url="https://github.com/$REPO/releases/download/v$SHORT/RosyTranscribe-$SHORT.zip"
         length="$LENGTH"
         type="application/octet-stream"
         sparkle:edSignature="$SIGNATURE" />
@@ -94,4 +94,4 @@ echo "  2. create the release and attach the zip:"
 echo "       gh release create v$SHORT $ZIP --title $SHORT"
 echo "     (or do it in the browser — the filename must match the url above)"
 echo
-echo "Rosy picks it up on next launch, or from Scribe Droplet ▸ Check for Updates…"
+echo "Rosy picks it up on next launch, or from Rosy Transcribe ▸ Check for Updates…"

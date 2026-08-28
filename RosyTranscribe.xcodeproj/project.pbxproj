@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1B0000000000000000000001 /* ScribeDropletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000001 /* ScribeDropletApp.swift */; };
+		1B0000000000000000000001 /* RosyTranscribeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000001 /* RosyTranscribeApp.swift */; };
 		1B0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000002 /* ContentView.swift */; };
 		1B0000000000000000000003 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000003 /* TranscriptionService.swift */; };
 		1B0000000000000000000004 /* MultipartBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000004 /* MultipartBuilder.swift */; };
@@ -40,7 +40,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		1A0000000000000000000001 /* ScribeDropletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScribeDropletApp.swift; sourceTree = "<group>"; };
+		1A0000000000000000000001 /* RosyTranscribeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RosyTranscribeApp.swift; sourceTree = "<group>"; };
 		1A0000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		1A0000000000000000000003 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000004 /* MultipartBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultipartBuilder.swift; sourceTree = "<group>"; };
@@ -48,8 +48,8 @@
 		1A0000000000000000000006 /* TranscriptFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptFormatter.swift; sourceTree = "<group>"; };
 		1A0000000000000000000007 /* MultipartBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultipartBuilderTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000000008 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
-		1A0000000000000000000009 /* ScribeDroplet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScribeDroplet.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		1A000000000000000000000A /* ScribeDropletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScribeDropletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A0000000000000000000009 /* RosyTranscribe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RosyTranscribe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A000000000000000000000A /* RosyTranscribeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RosyTranscribeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A000000000000000000000B /* Keyterms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keyterms.swift; sourceTree = "<group>"; };
 		1A000000000000000000000C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		1A000000000000000000000D /* KeytermsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeytermsTests.swift; sourceTree = "<group>"; };
@@ -85,16 +85,16 @@
 		1C0000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				1C0000000000000000000002 /* ScribeDroplet */,
-				1C0000000000000000000003 /* ScribeDropletTests */,
+				1C0000000000000000000002 /* RosyTranscribe */,
+				1C0000000000000000000003 /* RosyTranscribeTests */,
 				1C0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		1C0000000000000000000002 /* ScribeDroplet */ = {
+		1C0000000000000000000002 /* RosyTranscribe */ = {
 			isa = PBXGroup;
 			children = (
-				1A0000000000000000000001 /* ScribeDropletApp.swift */,
+				1A0000000000000000000001 /* RosyTranscribeApp.swift */,
 				1A0000000000000000000002 /* ContentView.swift */,
 				1A0000000000000000000003 /* TranscriptionService.swift */,
 				1A0000000000000000000004 /* MultipartBuilder.swift */,
@@ -110,10 +110,10 @@
 				1A0000000000000000000016 /* UpdaterService.swift */,
 				1A0000000000000000000012 /* Assets.xcassets */,
 			);
-			path = ScribeDroplet;
+			path = RosyTranscribe;
 			sourceTree = "<group>";
 		};
-		1C0000000000000000000003 /* ScribeDropletTests */ = {
+		1C0000000000000000000003 /* RosyTranscribeTests */ = {
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000000007 /* MultipartBuilderTests.swift */,
@@ -122,14 +122,14 @@
 				1A0000000000000000000010 /* TranscriptRecordTests.swift */,
 				1A0000000000000000000014 /* TranscriptSearchTests.swift */,
 			);
-			path = ScribeDropletTests;
+			path = RosyTranscribeTests;
 			sourceTree = "<group>";
 		};
 		1C0000000000000000000004 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1A0000000000000000000009 /* ScribeDroplet.app */,
-				1A000000000000000000000A /* ScribeDropletTests.xctest */,
+				1A0000000000000000000009 /* RosyTranscribe.app */,
+				1A000000000000000000000A /* RosyTranscribeTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -137,9 +137,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		1E0000000000000000000001 /* ScribeDroplet */ = {
+		1E0000000000000000000001 /* RosyTranscribe */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 200000000000000000000002 /* Build configuration list for PBXNativeTarget "ScribeDroplet" */;
+			buildConfigurationList = 200000000000000000000002 /* Build configuration list for PBXNativeTarget "RosyTranscribe" */;
 			buildPhases = (
 				1D0000000000000000000001 /* Sources */,
 				1D0000000000000000000002 /* Frameworks */,
@@ -149,14 +149,14 @@
 			);
 			dependencies = (
 			);
-			name = ScribeDroplet;
-			productName = ScribeDroplet;
-			productReference = 1A0000000000000000000009 /* ScribeDroplet.app */;
+			name = RosyTranscribe;
+			productName = RosyTranscribe;
+			productReference = 1A0000000000000000000009 /* RosyTranscribe.app */;
 			productType = "com.apple.product-type.application";
 		};
-		1E0000000000000000000002 /* ScribeDropletTests */ = {
+		1E0000000000000000000002 /* RosyTranscribeTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 200000000000000000000003 /* Build configuration list for PBXNativeTarget "ScribeDropletTests" */;
+			buildConfigurationList = 200000000000000000000003 /* Build configuration list for PBXNativeTarget "RosyTranscribeTests" */;
 			buildPhases = (
 				1D0000000000000000000004 /* Sources */,
 				1D0000000000000000000005 /* Frameworks */,
@@ -166,9 +166,9 @@
 			);
 			dependencies = (
 			);
-			name = ScribeDropletTests;
-			productName = ScribeDropletTests;
-			productReference = 1A000000000000000000000A /* ScribeDropletTests.xctest */;
+			name = RosyTranscribeTests;
+			productName = RosyTranscribeTests;
+			productReference = 1A000000000000000000000A /* RosyTranscribeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -189,7 +189,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 200000000000000000000001 /* Build configuration list for PBXProject "ScribeDroplet" */;
+			buildConfigurationList = 200000000000000000000001 /* Build configuration list for PBXProject "RosyTranscribe" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -202,8 +202,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				1E0000000000000000000001 /* ScribeDroplet */,
-				1E0000000000000000000002 /* ScribeDropletTests */,
+				1E0000000000000000000001 /* RosyTranscribe */,
+				1E0000000000000000000002 /* RosyTranscribeTests */,
 			);
 		};
 /* End PBXProject section */
@@ -234,7 +234,7 @@
 				1B0000000000000000000002 /* ContentView.swift in Sources */,
 				1B0000000000000000000005 /* Models.swift in Sources */,
 				1B0000000000000000000004 /* MultipartBuilder.swift in Sources */,
-				1B0000000000000000000001 /* ScribeDropletApp.swift in Sources */,
+				1B0000000000000000000001 /* RosyTranscribeApp.swift in Sources */,
 				1B0000000000000000000006 /* TranscriptFormatter.swift in Sources */,
 				1B0000000000000000000003 /* TranscriptionService.swift in Sources */,
 				1B000000000000000000000D /* Keyterms.swift in Sources */,
@@ -332,7 +332,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Scribe Droplet";
+				INFOPLIST_KEY_CFBundleDisplayName = "Rosy Transcribe";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -341,7 +341,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDroplet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.RosyTranscribe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -360,7 +360,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Scribe Droplet";
+				INFOPLIST_KEY_CFBundleDisplayName = "Rosy Transcribe";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -369,7 +369,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDroplet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.RosyTranscribe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -386,7 +386,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDropletTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.RosyTranscribeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -403,7 +403,7 @@
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.ScribeDropletTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rosy.RosyTranscribeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -413,7 +413,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		200000000000000000000001 /* Build configuration list for PBXProject "ScribeDroplet" */ = {
+		200000000000000000000001 /* Build configuration list for PBXProject "RosyTranscribe" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				210000000000000000000001 /* Debug */,
@@ -422,7 +422,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		200000000000000000000002 /* Build configuration list for PBXNativeTarget "ScribeDroplet" */ = {
+		200000000000000000000002 /* Build configuration list for PBXNativeTarget "RosyTranscribe" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				210000000000000000000003 /* Debug */,
@@ -431,7 +431,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		200000000000000000000003 /* Build configuration list for PBXNativeTarget "ScribeDropletTests" */ = {
+		200000000000000000000003 /* Build configuration list for PBXNativeTarget "RosyTranscribeTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				210000000000000000000005 /* Debug */,
