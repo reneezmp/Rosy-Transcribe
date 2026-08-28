@@ -469,6 +469,14 @@ extension SpeakerColor {
         case .teal: return .teal
         case .indigo: return .indigo
         case .brown: return .brown
+        case .red: return .red
+        case .burgundy:
+            return Color(nsColor: NSColor(name: nil) { appearance in
+                let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                return isDark
+                    ? NSColor(srgbRed: 0.85, green: 0.44, blue: 0.53, alpha: 1)   // lighter wine
+                    : NSColor(srgbRed: 0.44, green: 0.11, blue: 0.21, alpha: 1)   // deep wine
+            })
         }
     }
 }
@@ -561,6 +569,13 @@ struct ContentView: View {
             .frame(minHeight: 140, idealHeight: 300, maxHeight: .infinity)
         }
         .padding(18)
+        // Clicking any empty part of the window finishes a rename. Controls
+        // consume their own clicks, so this only catches the gaps.
+        .background(
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { focusedSpeaker = nil }
+        )
         // Rosy's screen is 1280x800, which leaves roughly 720pt once the menu
         // bar and the title bar are gone. A 700pt minimum plus padding was
         // taller than that, so the window could not be shortened at all and
@@ -907,6 +922,11 @@ struct ContentView: View {
                                         set: { model.speakerNames[id] = $0 }))
                     .textFieldStyle(.roundedBorder)
                     .focused($focusedSpeaker, equals: id)
+                    // Without these the row kept its editing form forever:
+                    // nothing else on the panel takes focus, so the field
+                    // never gave it up on its own.
+                    .onSubmit { focusedSpeaker = nil }
+                    .onExitCommand { focusedSpeaker = nil }
 
                 Menu {
                     ForEach(SpeakerColor.allCases, id: \.self) { option in

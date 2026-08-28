@@ -333,6 +333,28 @@ final class SpeakerColorTests: XCTestCase {
     func testNoSpeakersMeansNoColours() {
         XCTAssertTrue(SpeakerColor.assign(to: []).isEmpty)
     }
+
+    /// Saved transcripts store these raw values, so reordering the palette
+    /// would silently recolour every speaker on disk. New colours go on the
+    /// end; this test is what makes that rule enforceable.
+    func testPaletteRawValuesAreStable() {
+        XCTAssertEqual(SpeakerColor.blue.rawValue, 0)
+        XCTAssertEqual(SpeakerColor.orange.rawValue, 1)
+        XCTAssertEqual(SpeakerColor.green.rawValue, 2)
+        XCTAssertEqual(SpeakerColor.purple.rawValue, 3)
+        XCTAssertEqual(SpeakerColor.pink.rawValue, 4)
+        XCTAssertEqual(SpeakerColor.teal.rawValue, 5)
+        XCTAssertEqual(SpeakerColor.indigo.rawValue, 6)
+        XCTAssertEqual(SpeakerColor.brown.rawValue, 7)
+        XCTAssertEqual(SpeakerColor.red.rawValue, 8)
+        XCTAssertEqual(SpeakerColor.burgundy.rawValue, 9)
+    }
+
+    func testEveryColourHasAName() {
+        for colour in SpeakerColor.allCases {
+            XCTAssertFalse(colour.displayName.isEmpty)
+        }
+    }
 }
 
 // MARK: - Reassigning speakers

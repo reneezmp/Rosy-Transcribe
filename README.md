@@ -186,11 +186,17 @@ leaving a nameless row.
 whoever happens to talk first in that particular recording. Carrying names
 across files would mislabel more often than it helped.
 
-The palette is a fixed set of eight system colours rather than a free colour
-well, so every choice stays legible in both light and dark mode.
+The palette is a fixed set of ten colours rather than a free colour well, so
+every choice stays legible in both light and dark mode. Most are system
+colours, which adapt on their own; burgundy has no system equivalent and is
+defined for both appearances by hand, since a true burgundy on a dark
+background is barely readable.
+
 `SpeakerColor` is an enum of names with no SwiftUI import; `ContentView` maps
 each case to a `Color` in a switch that must be exhaustive, so the palette and
-its colours cannot drift apart.
+its colours cannot drift apart. **New colours are appended, never inserted** —
+saved transcripts store the raw values, so reordering would recolour every
+speaker on disk. A test pins them.
 
 ### Fixing what diarization got wrong
 
