@@ -265,6 +265,21 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(loaded.detectedLanguage, "por (100% confidence)")
     }
 
+    /// Privileged legal material should not be world-readable.
+    func testSavedTranscriptsAreReadableOnlyByTheirOwner() throws {
+        let original = record("Reunião", at: 1_700_000_000)
+        try store.save(original)
+
+        let file = directory.appendingPathComponent("\(original.id.uuidString).json")
+        let fileMode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(fileMode.int16Value, 0o600)
+
+        let dirMode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(dirMode.int16Value, 0o700)
+    }
+
     /// The files are meant to be openable in a text editor.
     func testSavedFilesArePlainReadableJSON() throws {
         let original = record("Reunião", at: 1_700_000_000)

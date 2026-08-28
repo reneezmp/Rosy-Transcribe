@@ -136,8 +136,21 @@ struct TranscriptStore {
     }
 
     func save(_ record: TranscriptRecord) throws {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try encoder.encode(record).write(to: url(for: record.id), options: .atomic)
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory,
+                                    withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700])
+        // createDirectory only applies attributes to directories it creates,
+        // so tighten an existing one too.
+        try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+
+        let target = url(for: record.id)
+        try encoder.encode(record).write(to: target, options: .atomic)
+
+        // These are recordings of privileged meetings written out as plain
+        // text. The default mode is world-readable, which is more exposure
+        // than the content deserves on any shared machine.
+        try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
     }
 
     func delete(_ id: UUID) throws {

@@ -592,6 +592,21 @@ final class TextEditingTests: XCTestCase {
                        "Lilian:\num três")
     }
 
+    /// Regression: `format` falls back to the flat API text when there are no
+    /// turns, so emptying the only segment used to bring the whole transcript
+    /// back — and then save it that way. The model clears the fallback when a
+    /// deletion empties the segment list; this pins the behaviour it relies on.
+    func testAnEmptiedTranscriptRendersAsNothingOnceTheFallbackIsCleared() {
+        let typed = SpeakerEditor.replacingText([turn("Bom dia.", "speaker_0")], at: 0, with: "")
+        let after = SpeakerEditor.committingText(typed, at: 0)
+
+        XCTAssertTrue(after.isEmpty)
+        XCTAssertEqual(TranscriptFormatter.format(turns: after, names: [:], fallbackText: ""), "")
+        // With the fallback still in place, the deletion would be undone:
+        XCTAssertEqual(TranscriptFormatter.format(turns: after, names: [:], fallbackText: "Bom dia."),
+                       "Bom dia.")
+    }
+
     func testEditedTextReachesTheMarkdown() {
         let edited = SpeakerEditor.replacingText([turn("vinte e cinco barra cinco", "speaker_0")],
                                                  at: 0,

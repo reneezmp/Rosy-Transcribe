@@ -43,7 +43,10 @@ final class TranscriberModel: ObservableObject {
     @Published var selectedFileSize: Int64?
     @Published var sourceFilename: String = ""
     @Published var turns: [SpeakerTurn] = [] {
-        didSet { scheduleSave() }
+        didSet {
+            scheduleSave()
+            refreshMatches()
+        }
     }
     /// The flat transcript, shown when diarization produced nothing to group.
     @Published var fallbackText: String = ""
@@ -72,6 +75,15 @@ final class TranscriberModel: ObservableObject {
     }
 
     // MARK: The library
+
+    /// Search lives here rather than in the view so the transcript is scanned
+    /// when the query or the text actually changes, not once per redraw for
+    /// every place in `body` that asks how many matches there are.
+    @Published var searchQuery: String = "" {
+        didSet { refreshMatches() }
+    }
+    @Published private(set) var matches: [TranscriptSearch.Match] = []
+    @Published var currentMatch = 0
 
     @Published private(set) var records: [TranscriptRecord] = []
     @Published private(set) var currentRecordID: UUID?
@@ -318,8 +330,40 @@ final class TranscriberModel: ObservableObject {
                 set: { self.turns = SpeakerEditor.replacingText(self.turns, at: index, with: $0) })
     }
 
-    func commitEdit(at index: Int) {
+    /// Returns true when the segment was emptied and therefore removed.
+    @discardableResult
+    func commitEdit(at index: Int) -> Bool {
+        let before = turns.count
         turns = SpeakerEditor.committingText(turns, at: index)
+        let removed = turns.count < before
+
+        // Deleting the last remaining segment must not bring the transcript
+        // back. `format` falls back to the flat API text when there are no
+        // turns, so leaving it in place would silently undo the deletion and
+        // then save it that way.
+        if removed && turns.isEmpty {
+            fallbackText = ""
+        }
+        return removed
+    }
+
+    // MARK: Search
+
+    private func refreshMatches() {
+        matches = TranscriptSearch.matches(for: searchQuery, in: turns)
+        currentMatch = 0
+    }
+
+    /// Kept in range: the transcript can be edited while a search is open, and
+    /// matches can vanish from underneath the current position.
+    var clampedMatch: Int {
+        guard !matches.isEmpty else { return 0 }
+        return min(max(currentMatch, 0), matches.count - 1)
+    }
+
+    func stepMatch(_ delta: Int) {
+        guard !matches.isEmpty else { return }
+        currentMatch = (clampedMatch + delta + matches.count) % matches.count
     }
 
     func addSpeaker() {
@@ -503,31 +547,22 @@ struct ContentView: View {
     @State private var editingTurn: Int?
     @FocusState private var focusedTurn: Int?
     @State private var isSearching = false
-    @State private var searchQuery = ""
-    @State private var currentMatch = 0
     @FocusState private var searchFocused: Bool
 
     private let speakerColumnWidth: CGFloat = 120
 
     // MARK: Search
 
-    private var matches: [TranscriptSearch.Match] {
-        isSearching ? TranscriptSearch.matches(for: searchQuery, in: model.turns) : []
-    }
-
-    /// Kept in range: the transcript can be edited while a search is open, and
-    /// matches can vanish underneath the current position.
-    private var clampedMatch: Int {
-        guard !matches.isEmpty else { return 0 }
-        return min(max(currentMatch, 0), matches.count - 1)
-    }
+    private var matches: [TranscriptSearch.Match] { model.matches }
 
     private var matchSummary: String {
-        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
+        if model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
         guard !matches.isEmpty else { return "No matches" }
-        return "\(clampedMatch + 1) of \(matches.count)"
+        return "\(model.clampedMatch + 1) of \(matches.count)"
     }
 
+    /// ⌘F on an open bar re-focuses it rather than closing it, which is what
+    /// every other macOS app does.
     private func openSearch() {
         finishEditing()
         isSearching = true
@@ -536,14 +571,9 @@ struct ContentView: View {
 
     private func closeSearch() {
         isSearching = false
-        searchQuery = ""
-        currentMatch = 0
+        model.searchQuery = ""
+        model.currentMatch = 0
         searchFocused = false
-    }
-
-    private func step(_ delta: Int) {
-        guard !matches.isEmpty else { return }
-        currentMatch = (clampedMatch + delta + matches.count) % matches.count
     }
 
     var body: some View {
@@ -643,7 +673,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem {
                 Button {
-                    if isSearching { closeSearch() } else { openSearch() }
+                    openSearch()
                 } label: {
                     Image(systemName: "magnifyingglass")
                 }
@@ -651,7 +681,10 @@ struct ContentView: View {
                 // discoverable as well as reachable by shortcut.
                 .keyboardShortcut("f", modifiers: .command)
                 .help("Find in transcript (⌘F)")
-                .disabled(!model.hasTranscript)
+                // Search reads the segments. A transcript that came back
+                // without diarization has none, and Find would only ever be
+                // able to answer "No matches".
+                .disabled(model.turns.isEmpty)
             }
             ToolbarItem {
                 Button {
@@ -851,10 +884,14 @@ struct ContentView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField("Find in transcript", text: $searchQuery)
+            TextField("Find in transcript", text: $model.searchQuery)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
-                .onSubmit { step(1) }
+                // Focus is taken here rather than in openSearch(): the field
+                // does not exist yet at the moment the bar is switched on, so
+                // a focus write from there is dropped.
+                .onAppear { searchFocused = true }
+                .onSubmit { model.stepMatch(1) }
                 .onExitCommand { closeSearch() }
 
             Text(matchSummary)
@@ -862,11 +899,11 @@ struct ContentView: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
 
-            Button { step(-1) } label: { Image(systemName: "chevron.up") }
+            Button { model.stepMatch(-1) } label: { Image(systemName: "chevron.up") }
                 .buttonStyle(.borderless)
                 .disabled(matches.isEmpty)
                 .help("Previous match")
-            Button { step(1) } label: { Image(systemName: "chevron.down") }
+            Button { model.stepMatch(1) } label: { Image(systemName: "chevron.down") }
                 .buttonStyle(.borderless)
                 .disabled(matches.isEmpty)
                 .help("Next match (↩)")
@@ -886,7 +923,7 @@ struct ContentView: View {
         // in a long meeting is thousands of matches, and re-scanning that list
         // for every visible row would be felt on a dual-core.
         let highlights = TranscriptSearch.rangesByTurn(matches)
-        let current = matches.isEmpty ? nil : matches[clampedMatch]
+        let current = matches.isEmpty ? nil : matches[model.clampedMatch]
 
         return ScrollViewReader { proxy in
             ScrollView {
@@ -915,11 +952,8 @@ struct ContentView: View {
                 }
                 .padding(10)
             }
-            .onChange(of: currentMatch) { _ in scrollToMatch(proxy) }
-            .onChange(of: searchQuery) { _ in
-                currentMatch = 0
-                scrollToMatch(proxy)
-            }
+            .onChange(of: model.currentMatch) { _ in scrollToMatch(proxy) }
+            .onChange(of: model.searchQuery) { _ in scrollToMatch(proxy) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
@@ -930,7 +964,7 @@ struct ContentView: View {
 
     private func scrollToMatch(_ proxy: ScrollViewProxy) {
         guard !matches.isEmpty else { return }
-        withAnimation { proxy.scrollTo(matches[clampedMatch].turnIndex, anchor: .center) }
+        withAnimation { proxy.scrollTo(matches[model.clampedMatch].turnIndex, anchor: .center) }
     }
 
     /// Marks up one segment's matches. The current one is solid, the rest are
@@ -955,81 +989,103 @@ struct ContentView: View {
         return attributed
     }
 
+    // SwiftUI can evaluate a row for an index that has just gone away: editing
+    // can delete a segment, and `ForEach` over indices only notices on the
+    // next pass. Indexing straight into `turns` here would crash.
+    @ViewBuilder
     private func turnRow(at index: Int,
                          highlights: [Range<String.Index>] = [],
                          current: Range<String.Index>? = nil) -> some View {
-        let turn = model.turns[index]
+        if model.turns.indices.contains(index) {
+            let turn = model.turns[index]
 
-        // The name is repeated on every segment, including where the segment
-        // above has the same speaker. This view is an editor of segments, and
-        // a blank name did two bad things: it made two segments look like one
-        // merged block, and it hid the fact that the blank space is itself
-        // right-clickable. Joining adjacent segments is an output concern, and
-        // stays in `TranscriptFormatter.merged`.
-        return HStack(alignment: .top, spacing: 10) {
-            Text(model.displayName(for: turn.speakerID))
-                .font(.system(.body, design: .monospaced).weight(.semibold))
-                .foregroundStyle(turn.speakerID == nil
-                                 ? Color.secondary
-                                 : model.color(for: turn.speakerID).color)
-                .frame(width: speakerColumnWidth, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                // The whole column is the target, so a continuation row can be
-                // right-clicked too.
-                .contentShape(Rectangle())
-                .contextMenu { reassignmentMenu(for: index) }
-            if editingTurn == index {
-                // A plain field, styled to match the text it replaces, so the
-                // line does not jump when it swaps in.
-                TextField("", text: model.textBinding(at: index), axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(.body, design: .monospaced))
-                    .focused($focusedTurn, equals: index)
-                    .onAppear { focusedTurn = index }
-                    .onSubmit { finishEditing() }
-                    .onExitCommand { finishEditing() }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                // Click to edit. Only the segment under the pointer becomes a
-                // field: hundreds of live text fields in the list would be a
-                // lot to ask of a fanless dual-core, and read-only text is
-                // also what a future find-and-highlight can mark up.
-                // Plain text unless something matched, so building an
-                // AttributedString is paid for only while searching.
-                Group {
-                    if highlights.isEmpty {
-                        Text(turn.text)
-                    } else {
-                        Text(highlighted(turn.text, ranges: highlights, current: current))
+            // The name is repeated on every segment, including where the
+            // segment above has the same speaker. This view is an editor of
+            // segments, and a blank name did two bad things: it made two
+            // segments look like one merged block, and it hid the fact that
+            // the blank space is itself right-clickable. Joining adjacent
+            // segments is an output concern, and stays in
+            // `TranscriptFormatter.merged`.
+            HStack(alignment: .top, spacing: 10) {
+                Text(model.displayName(for: turn.speakerID))
+                    .font(.system(.body, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(turn.speakerID == nil
+                                     ? Color.secondary
+                                     : model.color(for: turn.speakerID).color)
+                    .frame(width: speakerColumnWidth, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    // The whole column is the target, so a continuation row
+                    // can be right-clicked too.
+                    .contentShape(Rectangle())
+                    .contextMenu { reassignmentMenu(for: index) }
+
+                if editingTurn == index {
+                    // A plain field, styled to match the text it replaces, so
+                    // the line does not jump when it swaps in.
+                    TextField("", text: model.textBinding(at: index), axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(.body, design: .monospaced))
+                        .focused($focusedTurn, equals: index)
+                        .onAppear { focusedTurn = index }
+                        .onSubmit { finishEditing() }
+                        .onExitCommand { finishEditing() }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    // Click to edit. Only the segment under the pointer
+                    // becomes a field: hundreds of live text fields would be a
+                    // lot to ask of a fanless dual-core, and read-only text is
+                    // also the only thing find-and-highlight can mark up.
+                    // The AttributedString is built only where something
+                    // matched, so the markup is paid for only while searching.
+                    Group {
+                        if highlights.isEmpty {
+                            Text(turn.text)
+                        } else {
+                            Text(highlighted(turn.text, ranges: highlights, current: current))
+                        }
                     }
+                    .font(.system(.body, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentShape(Rectangle())
+                    .onTapGesture { beginEditing(index) }
                 }
-                .font(.system(.body, design: .monospaced))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .contentShape(Rectangle())
-                .onTapGesture { beginEditing(index) }
             }
         }
     }
 
     private func beginEditing(_ index: Int) {
-        finishEditing()
+        // Committing the previous edit can delete an emptied segment, which
+        // shifts everything after it up by one. Without this, clicking a later
+        // segment would open the wrong one — or nothing.
+        let removed = finishEditing()
         focusedSpeaker = nil
-        editingTurn = index
+
+        var target = index
+        if let removed, removed < index { target -= 1 }
+        guard model.turns.indices.contains(target) else { return }
+        editingTurn = target
     }
 
     /// Commits whatever segment is open. Trims it, and drops it entirely if it
     /// was emptied — which doubles as the way to delete a segment.
-    private func finishEditing() {
-        guard let index = editingTurn else { return }
-        model.commitEdit(at: index)
+    @discardableResult
+    private func finishEditing() -> Int? {
+        guard let index = editingTurn else { return nil }
+        let removed = model.commitEdit(at: index)
         editingTurn = nil
         focusedTurn = nil
+        return removed ? index : nil
     }
 
     @ViewBuilder
     private func reassignmentMenu(for index: Int) -> some View {
-        let current = model.turns[index].speakerID
+        let current = model.turns.indices.contains(index) ? model.turns[index].speakerID : nil
+        // Gated on there being somewhere to move to, not on the number of
+        // speakers. Delete the only speaker and everything becomes Unknown;
+        // add one back and "reassign all" is exactly what you want, but a
+        // count of one would have hidden it.
+        let destinations = model.speakerOrder.filter { $0 != current }
 
         ForEach(model.speakerOrder, id: \.self) { id in
             Button {
@@ -1043,10 +1099,10 @@ struct ContentView: View {
             }
         }
 
-        if model.speakerOrder.count > 1 {
+        if !destinations.isEmpty {
             Divider()
             Menu("Reassign all of \(model.displayName(for: current))'s segments to…") {
-                ForEach(model.speakerOrder.filter { $0 != current }, id: \.self) { id in
+                ForEach(destinations, id: \.self) { id in
                     Button(model.displayName(for: id)) {
                         model.reassignAll(from: current, to: id)
                     }
