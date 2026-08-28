@@ -31,6 +31,9 @@
 		1B0000000000000000000016 /* SpeakerEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000011 /* SpeakerEditor.swift */; };
 		1B0000000000000000000017 /* SpeakerEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000011 /* SpeakerEditor.swift */; };
 		1B0000000000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000012 /* Assets.xcassets */; };
+		1B0000000000000000000019 /* TranscriptSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000013 /* TranscriptSearch.swift */; };
+		1B000000000000000000001A /* TranscriptSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000013 /* TranscriptSearch.swift */; };
+		1B000000000000000000001B /* TranscriptSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000014 /* TranscriptSearchTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,6 +55,8 @@
 		1A0000000000000000000010 /* TranscriptRecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptRecordTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000000011 /* SpeakerEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerEditor.swift; sourceTree = "<group>"; };
 		1A0000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1A0000000000000000000013 /* TranscriptSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSearch.swift; sourceTree = "<group>"; };
+		1A0000000000000000000014 /* TranscriptSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSearchTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +100,7 @@
 				1A000000000000000000000E /* SpeakerColor.swift */,
 				1A000000000000000000000F /* TranscriptRecord.swift */,
 				1A0000000000000000000011 /* SpeakerEditor.swift */,
+				1A0000000000000000000013 /* TranscriptSearch.swift */,
 				1A0000000000000000000012 /* Assets.xcassets */,
 			);
 			path = ScribeDroplet;
@@ -107,6 +113,7 @@
 				1A0000000000000000000008 /* TranscriptFormatterTests.swift */,
 				1A000000000000000000000D /* KeytermsTests.swift */,
 				1A0000000000000000000010 /* TranscriptRecordTests.swift */,
+				1A0000000000000000000014 /* TranscriptSearchTests.swift */,
 			);
 			path = ScribeDropletTests;
 			sourceTree = "<group>";
@@ -228,6 +235,7 @@
 				1B0000000000000000000011 /* SpeakerColor.swift in Sources */,
 				1B0000000000000000000013 /* TranscriptRecord.swift in Sources */,
 				1B0000000000000000000016 /* SpeakerEditor.swift in Sources */,
+				1B0000000000000000000019 /* TranscriptSearch.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -247,6 +255,8 @@
 				1B0000000000000000000014 /* TranscriptRecord.swift in Sources */,
 				1B0000000000000000000015 /* TranscriptRecordTests.swift in Sources */,
 				1B0000000000000000000017 /* SpeakerEditor.swift in Sources */,
+				1B000000000000000000001A /* TranscriptSearch.swift in Sources */,
+				1B000000000000000000001B /* TranscriptSearchTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

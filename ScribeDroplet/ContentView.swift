@@ -502,8 +502,49 @@ struct ContentView: View {
     @FocusState private var focusedSpeaker: String?
     @State private var editingTurn: Int?
     @FocusState private var focusedTurn: Int?
+    @State private var isSearching = false
+    @State private var searchQuery = ""
+    @State private var currentMatch = 0
+    @FocusState private var searchFocused: Bool
 
     private let speakerColumnWidth: CGFloat = 120
+
+    // MARK: Search
+
+    private var matches: [TranscriptSearch.Match] {
+        isSearching ? TranscriptSearch.matches(for: searchQuery, in: model.turns) : []
+    }
+
+    /// Kept in range: the transcript can be edited while a search is open, and
+    /// matches can vanish underneath the current position.
+    private var clampedMatch: Int {
+        guard !matches.isEmpty else { return 0 }
+        return min(max(currentMatch, 0), matches.count - 1)
+    }
+
+    private var matchSummary: String {
+        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
+        guard !matches.isEmpty else { return "No matches" }
+        return "\(clampedMatch + 1) of \(matches.count)"
+    }
+
+    private func openSearch() {
+        finishEditing()
+        isSearching = true
+        searchFocused = true
+    }
+
+    private func closeSearch() {
+        isSearching = false
+        searchQuery = ""
+        currentMatch = 0
+        searchFocused = false
+    }
+
+    private func step(_ delta: Int) {
+        guard !matches.isEmpty else { return }
+        currentMatch = (clampedMatch + delta + matches.count) % matches.count
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -566,6 +607,7 @@ struct ContentView: View {
             }
             controls
             banners
+            if isSearching { searchBar }
             HStack(alignment: .top, spacing: 12) {
                 transcriptBox
                 // Shown whenever there is a transcript, not only when there
@@ -599,6 +641,18 @@ struct ContentView: View {
         // NavigationSplitView provides its own sidebar toggle; adding one
         // here produced two.
         .toolbar {
+            ToolbarItem {
+                Button {
+                    if isSearching { closeSearch() } else { openSearch() }
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                // In the toolbar rather than hidden away, so Find is
+                // discoverable as well as reachable by shortcut.
+                .keyboardShortcut("f", modifiers: .command)
+                .help("Find in transcript (⌘F)")
+                .disabled(!model.hasTranscript)
+            }
             ToolbarItem {
                 Button {
                     model.newTranscription()
@@ -792,31 +846,80 @@ struct ContentView: View {
         }
     }
 
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField("Find in transcript", text: $searchQuery)
+                .textFieldStyle(.plain)
+                .focused($searchFocused)
+                .onSubmit { step(1) }
+                .onExitCommand { closeSearch() }
+
+            Text(matchSummary)
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+
+            Button { step(-1) } label: { Image(systemName: "chevron.up") }
+                .buttonStyle(.borderless)
+                .disabled(matches.isEmpty)
+                .help("Previous match")
+            Button { step(1) } label: { Image(systemName: "chevron.down") }
+                .buttonStyle(.borderless)
+                .disabled(matches.isEmpty)
+                .help("Next match (↩)")
+            Button { closeSearch() } label: { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+                .help("Close (esc)")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.12)))
+    }
+
     // MARK: Transcript
 
     private var transcriptBox: some View {
-        ScrollView {
-            // Lazy, because a forty-minute meeting is hundreds of turns and
-            // Rosy is a dual-core Intel.
-            LazyVStack(alignment: .leading, spacing: 10) {
-                if model.turns.isEmpty {
-                    Text(model.fallbackText.isEmpty
-                         ? "The transcript will appear here."
-                         : model.fallbackText)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(model.fallbackText.isEmpty ? Color.secondary : Color.primary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    // Indices rather than `enumerated()`: Swift has no key
-                    // path to a tuple element, so `id: \.offset` does not
-                    // compile.
-                    ForEach(model.turns.indices, id: \.self) { index in
-                        turnRow(at: index)
+        // Grouped once per redraw rather than filtered per row: a common word
+        // in a long meeting is thousands of matches, and re-scanning that list
+        // for every visible row would be felt on a dual-core.
+        let highlights = TranscriptSearch.rangesByTurn(matches)
+        let current = matches.isEmpty ? nil : matches[clampedMatch]
+
+        return ScrollViewReader { proxy in
+            ScrollView {
+                // Lazy, because a forty-minute meeting is hundreds of turns and
+                // Rosy is a dual-core Intel.
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if model.turns.isEmpty {
+                        Text(model.fallbackText.isEmpty
+                             ? "The transcript will appear here."
+                             : model.fallbackText)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(model.fallbackText.isEmpty ? Color.secondary : Color.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        // Indices rather than `enumerated()`: Swift has no key
+                        // path to a tuple element, so `id: \.offset` does not
+                        // compile.
+                        ForEach(model.turns.indices, id: \.self) { index in
+                            turnRow(at: index,
+                                    highlights: highlights[index] ?? [],
+                                    current: current?.turnIndex == index ? current?.range : nil)
+                                .id(index)
+                        }
                     }
                 }
+                .padding(10)
             }
-            .padding(10)
+            .onChange(of: currentMatch) { _ in scrollToMatch(proxy) }
+            .onChange(of: searchQuery) { _ in
+                currentMatch = 0
+                scrollToMatch(proxy)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
@@ -825,7 +928,36 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private func turnRow(at index: Int) -> some View {
+    private func scrollToMatch(_ proxy: ScrollViewProxy) {
+        guard !matches.isEmpty else { return }
+        withAnimation { proxy.scrollTo(matches[clampedMatch].turnIndex, anchor: .center) }
+    }
+
+    /// Marks up one segment's matches. The current one is solid, the rest are
+    /// tinted, so it is obvious which of seventeen hits you are looking at.
+    private func highlighted(_ text: String,
+                             ranges: [Range<String.Index>],
+                             current: Range<String.Index>?) -> AttributedString {
+        var attributed = AttributedString(text)
+        for range in ranges {
+            let offset = text.distance(from: text.startIndex, to: range.lowerBound)
+            let length = text.distance(from: range.lowerBound, to: range.upperBound)
+            guard length > 0 else { continue }
+            let lower = attributed.index(attributed.startIndex, offsetByCharacters: offset)
+            let upper = attributed.index(lower, offsetByCharacters: length)
+            if range == current {
+                attributed[lower..<upper].backgroundColor = .orange
+                attributed[lower..<upper].foregroundColor = .black
+            } else {
+                attributed[lower..<upper].backgroundColor = Color.yellow.opacity(0.35)
+            }
+        }
+        return attributed
+    }
+
+    private func turnRow(at index: Int,
+                         highlights: [Range<String.Index>] = [],
+                         current: Range<String.Index>? = nil) -> some View {
         let turn = model.turns[index]
 
         // The name is repeated on every segment, including where the segment
@@ -862,12 +994,20 @@ struct ContentView: View {
                 // field: hundreds of live text fields in the list would be a
                 // lot to ask of a fanless dual-core, and read-only text is
                 // also what a future find-and-highlight can mark up.
-                Text(turn.text)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentShape(Rectangle())
-                    .onTapGesture { beginEditing(index) }
+                // Plain text unless something matched, so building an
+                // AttributedString is paid for only while searching.
+                Group {
+                    if highlights.isEmpty {
+                        Text(turn.text)
+                    } else {
+                        Text(highlighted(turn.text, ranges: highlights, current: current))
+                    }
+                }
+                .font(.system(.body, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentShape(Rectangle())
+                .onTapGesture { beginEditing(index) }
             }
         }
     }

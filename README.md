@@ -60,7 +60,8 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 | `Keyterms.swift` | Glossary parsing and limits |
 | `SpeakerColor.swift` | The speaker palette, free of SwiftUI |
 | `TranscriptRecord.swift` | A saved transcript, and the on-disk store |
-| `SpeakerEditor.swift` | Reassigning segments, free of UI |
+| `SpeakerEditor.swift` | Reassigning and editing segments, free of UI |
+| `TranscriptSearch.swift` | Finding text, free of UI |
 | `KeychainStore.swift` | The API key, and migration off `UserDefaults` |
 
 `TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
@@ -208,6 +209,19 @@ read-only text is also what a find-and-highlight can mark up later.
 Emptying a segment deletes it, which is how a stray "Uhum." gets removed. If
 that leaves two adjacent segments by the same speaker they stay separate in
 the data and join on output, exactly as a reassignment does.
+
+### Finding things
+
+⌘F, or the magnifying glass in the toolbar, opens a find bar over the
+transcript. Return jumps to the next match, ⇧⌫ the previous, Escape closes it.
+The current match is solid, the others tinted, and the list scrolls to keep
+the current one centred.
+
+Search is case- **and diacritic-insensitive**, which is the part that matters
+here: this transcribes Portuguese, and `averbacao` typed in a hurry has to
+find `averbação`. Nobody should have to reach for the accent keys mid-search.
+
+It searches segment text, not speaker names.
 
 ### Fixing what diarization got wrong
 
