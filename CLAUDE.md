@@ -36,6 +36,7 @@ Portuguese-language legal meetings.
 python3 Tools/validate_pbxproj.py   # after any hand-edit of the project file
 python3 Tools/make_icon.py          # regenerate the app icon
 ./Tools/release.sh                  # build, zip, sign, print the appcast entry
+python3 Tools/set_update_key.py KEY  # set the Sparkle public key safely
 ```
 
 Tests, without the full build:

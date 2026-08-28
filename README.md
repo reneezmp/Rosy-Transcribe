@@ -371,28 +371,26 @@ the only thing preventing someone else from shipping your users an "update".
 1. Build once so Xcode fetches the package, then find `generate_keys` in
    `.build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/` and run
    it. It puts a private key in your login Keychain and prints a public key.
-2. Put that public key in the `SUPublicEDKey` build setting. Either:
-
-   **In Xcode** — select the project, the **RosyTranscribe** target,
-   **Build Settings**, search `SUPublicEDKey`, and replace the placeholder.
-   Setting the top-level row fills in both Debug and Release at once.
-
-   **Or in Terminal** — one line, both configurations:
+2. Put that public key into the project:
 
    ```sh
-   sed -i '' 's|REPLACE_WITH_PUBLIC_ED_KEY|PASTE_THE_KEY_HERE|g' \
-     RosyTranscribe.xcodeproj/project.pbxproj
+   python3 Tools/set_update_key.py 'the-key-generate_keys-printed'
    ```
 
-   The `|` delimiter matters: the key is base64 and usually contains `/`,
-   which would end a `s/.../.../` expression early. Keep the surrounding
-   quotes in the file for the same reason — an unquoted base64 value with a
-   `/` or `+` in it is not valid in a project file, and Xcode will refuse to
-   open one.
+   It sets both configurations, tolerates the newlines and spaces that come
+   with copying out of a terminal, and re-validates the project file before
+   leaving it changed. If the result would not parse it puts the file back
+   and says so.
 
-   `project.pbxproj` lives *inside* `RosyTranscribe.xcodeproj`, which Finder
-   shows as a single item: right-click it and choose **Show Package
-   Contents** to see in. From Terminal it is just a normal path.
+   Not a `sed` one-liner on purpose: the key is base64, so it contains `/`
+   and `+` and usually ends in `=`, which fight sed's delimiter and shell
+   quoting — and are invalid unquoted inside a project file. Getting that
+   wrong yields a project Xcode refuses to open.
+
+   You can also set `SUPublicEDKey` in Xcode's **Build Settings**, which is
+   just as safe. Editing `project.pbxproj` by hand is the option to avoid;
+   it lives inside the `.xcodeproj` package, which Finder shows as a single
+   item — right-click, **Show Package Contents**.
 
 Until step 2 is done Sparkle will refuse every update it is offered, which is
 the correct behaviour for an unsigned feed.
