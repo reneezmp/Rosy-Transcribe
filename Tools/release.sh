@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PROJECT="RosyTranscribe.xcodeproj"
-REPO="reneezmp/RosyTranscriber"
+REPO="reneezmp/Rosy-Transcribe"
 DERIVED="$(pwd)/.build/DerivedData"
 
 say() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }

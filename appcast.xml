@@ -16,7 +16,7 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Rosy Transcribe</title>
-    <link>https://raw.githubusercontent.com/reneezmp/RosyTranscriber/main/appcast.xml</link>
+    <link>https://raw.githubusercontent.com/reneezmp/Rosy-Transcribe/main/appcast.xml</link>
     <description>Updates for Rosy Transcribe</description>
     <language>en</language>
 
