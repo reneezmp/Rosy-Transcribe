@@ -21,7 +21,7 @@ final class UpdaterService: NSObject, ObservableObject, SPUUpdaterDelegate {
     /// Served straight from the repository over raw.githubusercontent.com.
     /// GitHub Pages would work too, but this is one fewer thing to set up and
     /// one fewer place to forget to update.
-    static let feedURL = "https://raw.githubusercontent.com/reneezmp/Rosy-Transcribe/main/appcast.xml"
+    static let feedURL = "https://raw.githubusercontent.com/reneezmp/RosyTranscriber/main/appcast.xml"
 
     @Published private(set) var availableVersion: String?
     @Published private(set) var lastCheckFailed: String?
