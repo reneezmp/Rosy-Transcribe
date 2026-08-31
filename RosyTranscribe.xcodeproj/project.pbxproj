@@ -341,7 +341,7 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Rosy Transcribe";
-				INFOPLIST_KEY_SUPublicEDKey = "REPLACE_WITH_PUBLIC_ED_KEY";
+				INFOPLIST_KEY_SUPublicEDKey = "7Nh8jSxFmE2DGw3BGQ9YdIpM115AU743EXUuMA9fN3c=";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
@@ -370,7 +370,7 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Rosy Transcribe";
-				INFOPLIST_KEY_SUPublicEDKey = "REPLACE_WITH_PUBLIC_ED_KEY";
+				INFOPLIST_KEY_SUPublicEDKey = "7Nh8jSxFmE2DGw3BGQ9YdIpM115AU743EXUuMA9fN3c=";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
