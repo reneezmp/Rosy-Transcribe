@@ -28,6 +28,57 @@ enum TranscriptionLanguage: String, CaseIterable, Identifiable {
         case .spanish: return "spa"
         }
     }
+
+    /// Apple Speech uses BCP-47 locales rather than ElevenLabs' ISO 639-3
+    /// codes. Auto follows the Mac's current locale because SpeechTranscriber
+    /// deliberately does not guess a language.
+    var appleLocale: Locale {
+        switch self {
+        case .auto: return .current
+        case .portuguese: return Locale(identifier: "pt-BR")
+        case .english: return Locale(identifier: "en-US")
+        case .spanish: return Locale(identifier: "es-ES")
+        }
+    }
+}
+
+enum TranscriptionEngine: String, CaseIterable, Identifiable {
+    case elevenLabs
+    case onDevice
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .elevenLabs: return "ElevenLabs"
+        case .onDevice: return "On This Mac"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .elevenLabs: return "Scribe v2 · online"
+        case .onDevice: return "Apple Speech + local diarisation"
+        }
+    }
+}
+
+enum LocalTranscriptionAvailability {
+    static var isAvailable: Bool {
+#if arch(arm64)
+        if #available(macOS 26.0, *) { return true }
+#endif
+        return false
+    }
+
+    static var explanation: String {
+#if arch(arm64)
+        if #available(macOS 26.0, *) { return "Runs entirely on this Mac." }
+        return "On-device transcription requires macOS 26 or later."
+#else
+        return "On-device transcription requires an Apple-silicon Mac and macOS 26 or later."
+#endif
+    }
 }
 
 /// Every failure this app can produce, each with a message a human can act on.
@@ -51,6 +102,8 @@ enum TranscriptionError: LocalizedError {
     case network(String)
     case notHTTP
     case undecodableResponse(String)
+    case localUnavailable
+    case localLanguageUnsupported(String)
 
     var errorDescription: String? {
         switch self {
@@ -92,6 +145,10 @@ enum TranscriptionError: LocalizedError {
             return "The server sent a response that was not HTTP. This should not happen."
         case .undecodableResponse(let detail):
             return "The transcription came back in a shape this app did not expect: \(detail)"
+        case .localUnavailable:
+            return LocalTranscriptionAvailability.explanation
+        case .localLanguageUnsupported(let language):
+            return "Apple's on-device speech model does not support \(language) on this Mac."
         }
     }
 
@@ -116,12 +173,15 @@ struct TranscriptionRequest {
     let languageCode: String?
     /// Terms to bias recognition. Empty means: do not send the parameter.
     let keyterms: [String]
+    let diarize: Bool
 
-    init(fileURL: URL, apiKey: String, languageCode: String?, keyterms: [String] = []) {
+    init(fileURL: URL, apiKey: String, languageCode: String?, keyterms: [String] = [],
+         diarize: Bool = true) {
         self.fileURL = fileURL
         self.apiKey = apiKey
         self.languageCode = languageCode
         self.keyterms = keyterms
+        self.diarize = diarize
     }
 }
 
@@ -164,7 +224,8 @@ struct TranscriptionService {
 
         let builder = MultipartBuilder(boundary: boundaryProvider())
         let body = builder.body(fields: Self.formFields(languageCode: request.languageCode,
-                                                        keyterms: request.keyterms),
+                                                        keyterms: request.keyterms,
+                                                        diarize: request.diarize),
                                 fileFieldName: "file",
                                 fileName: request.fileURL.lastPathComponent,
                                 fileMIMEType: MultipartBuilder.mimeType(forPathExtension: request.fileURL.pathExtension),
@@ -202,10 +263,10 @@ struct TranscriptionService {
     /// Split out from `transcribe` so the exact shape of the request can be
     /// asserted in tests without touching the network — this is where the
     /// keyterms format went wrong once already.
-    static func formFields(languageCode: String?, keyterms: [String]) -> [MultipartField] {
+    static func formFields(languageCode: String?, keyterms: [String], diarize: Bool = true) -> [MultipartField] {
         var fields = [
             MultipartField("model_id", modelID),
-            MultipartField("diarize", "true"),
+            MultipartField("diarize", diarize ? "true" : "false"),
             MultipartField("timestamps_granularity", "word"),
         ]
         // Omitted entirely for auto-detect: sending an empty string is not the

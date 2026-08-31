@@ -1,5 +1,16 @@
 import Foundation
 
+/// One spoken word and its location in the source audio.
+///
+/// Optional timestamps tolerate incomplete API responses. Keeping the word
+/// itself beside them leaves enough information for word-level seeking later,
+/// even though the first playback UI only seeks to the start of a segment.
+struct TimedWord: Equatable, Codable {
+    let text: String
+    let start: Double?
+    let end: Double?
+}
+
 /// One run of consecutive words spoken by the same speaker.
 struct SpeakerTurn: Equatable, Codable {
     /// The raw API id, e.g. "speaker_0". Nil when diarization returned nothing.
@@ -8,6 +19,34 @@ struct SpeakerTurn: Equatable, Codable {
     /// Mutable because the transcript is editable: Scribe mishears things,
     /// and a legal transcript has to be correctable.
     var text: String
+    /// Optional so transcripts written before playback support still decode.
+    var timedWords: [TimedWord]?
+
+    init(speakerID: String?, text: String, timedWords: [TimedWord]? = nil) {
+        self.speakerID = speakerID
+        self.text = text
+        self.timedWords = timedWords
+    }
+
+    var startTime: Double? {
+        timedWords?.compactMap(\.start).first
+    }
+
+    /// Timestamp for an Option-click in the displayed text. Once a segment
+    /// has been edited away from the API's original words, exact word mapping
+    /// is no longer trustworthy, so it honestly falls back to the segment.
+    func timestamp(atUTF16Offset offset: Int) -> Double? {
+        guard let timedWords, !timedWords.isEmpty else { return startTime }
+        guard timedWords.map(\.text).joined(separator: " ") == text else { return startTime }
+
+        var cursor = 0
+        for word in timedWords {
+            let end = cursor + word.text.utf16.count
+            if offset >= cursor && offset <= end { return word.start ?? startTime }
+            cursor = end + 1
+        }
+        return startTime
+    }
 }
 
 /// Turns `words[]` into a speaker-labelled transcript.
@@ -26,23 +65,30 @@ enum TranscriptFormatter {
         var turns: [SpeakerTurn] = []
         var speaker: String?
         var tokens: [String] = []
+        var timedWords: [TimedWord] = []
 
         for word in words where isSpokenWord(word) {
             let token = word.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !token.isEmpty else { continue }
 
             if !tokens.isEmpty && word.speakerId != speaker {
-                turns.append(SpeakerTurn(speakerID: speaker, text: tokens.joined(separator: " ")))
+                turns.append(SpeakerTurn(speakerID: speaker,
+                                         text: tokens.joined(separator: " "),
+                                         timedWords: storedTimings(timedWords)))
                 tokens = []
+                timedWords = []
             }
             if tokens.isEmpty {
                 speaker = word.speakerId
             }
             tokens.append(token)
+            timedWords.append(TimedWord(text: token, start: word.start, end: word.end))
         }
 
         if !tokens.isEmpty {
-            turns.append(SpeakerTurn(speakerID: speaker, text: tokens.joined(separator: " ")))
+            turns.append(SpeakerTurn(speakerID: speaker,
+                                     text: tokens.joined(separator: " "),
+                                     timedWords: storedTimings(timedWords)))
         }
         return turns
     }
@@ -74,8 +120,16 @@ enum TranscriptFormatter {
         var out: [SpeakerTurn] = []
         for turn in turns {
             if let last = out.last, last.speakerID == turn.speakerID {
+                let combinedTimings: [TimedWord]?
+                switch (last.timedWords, turn.timedWords) {
+                case let (left?, right?): combinedTimings = left + right
+                case let (left?, nil): combinedTimings = left
+                case let (nil, right?): combinedTimings = right
+                case (nil, nil): combinedTimings = nil
+                }
                 out[out.count - 1] = SpeakerTurn(speakerID: last.speakerID,
-                                                 text: last.text + " " + turn.text)
+                                                 text: last.text + " " + turn.text,
+                                                 timedWords: combinedTimings)
             } else {
                 out.append(turn)
             }
@@ -188,5 +242,11 @@ enum TranscriptFormatter {
     /// sending the field — in which case dropping every word would be worse.
     private static func isSpokenWord(_ word: TranscriptionWord) -> Bool {
         word.type == nil || word.type == "word"
+    }
+
+    /// A response with no timestamps behaves like an old transcript rather
+    /// than acquiring a meaningless array of nil timing values.
+    private static func storedTimings(_ words: [TimedWord]) -> [TimedWord]? {
+        words.contains { $0.start != nil || $0.end != nil } ? words : nil
     }
 }

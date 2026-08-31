@@ -84,6 +84,34 @@ final class TranscriptFormatterTests: XCTestCase {
         XCTAssertEqual(TranscriptFormatter.turns(from: []), [])
     }
 
+    func testWordTimestampsSurviveGrouping() throws {
+        let words = [
+            TranscriptionWord(type: "word", text: "Bom", start: 1.25, end: 1.5,
+                              speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "dia.", start: 1.55, end: 1.9,
+                              speakerId: "speaker_0"),
+        ]
+        let turn = try XCTUnwrap(TranscriptFormatter.turns(from: words).first)
+
+        XCTAssertEqual(turn.startTime, 1.25)
+        XCTAssertEqual(turn.timedWords, [
+            TimedWord(text: "Bom", start: 1.25, end: 1.5),
+            TimedWord(text: "dia.", start: 1.55, end: 1.9),
+        ])
+        XCTAssertEqual(turn.timestamp(atUTF16Offset: 0), 1.25)
+        XCTAssertEqual(turn.timestamp(atUTF16Offset: 5), 1.55)
+    }
+
+    func testEditedTextFallsBackToTheSegmentStartForSeeking() {
+        let turn = SpeakerTurn(speakerID: "speaker_0",
+                               text: "Bom dia, doutora.",
+                               timedWords: [
+                                TimedWord(text: "Bom", start: 4, end: 4.2),
+                                TimedWord(text: "dia.", start: 4.3, end: 4.6),
+                               ])
+        XCTAssertEqual(turn.timestamp(atUTF16Offset: 12), 4)
+    }
+
     // MARK: - Labels
 
     func testSpeakerLabelsAreOneIndexedForHumans() {
@@ -616,5 +644,38 @@ final class TextEditingTests: XCTestCase {
                                                     names: ["speaker_0": "Ana"],
                                                     fallbackText: ""),
                        "**Ana**\nvinte barra cinco\n")
+    }
+
+    func testReturnSplitsASegmentAndKeepsItsSpeaker() {
+        let turns = [turn("Bom dia. Outra pessoa falou.", "speaker_0")]
+        let offset = "Bom dia.".utf16.count
+        let split = SpeakerEditor.splitting(turns, at: 0, utf16Offset: offset)
+
+        XCTAssertEqual(split, [turn("Bom dia.", "speaker_0"),
+                               turn("Outra pessoa falou.", "speaker_0")])
+    }
+
+    func testReturnAtAnEdgeDoesNotCreateAnEmptySegment() {
+        let turns = [turn("Bom dia.", "speaker_0")]
+        XCTAssertEqual(SpeakerEditor.splitting(turns, at: 0, utf16Offset: 0), turns)
+        XCTAssertEqual(SpeakerEditor.splitting(turns,
+                                               at: 0,
+                                               utf16Offset: turns[0].text.utf16.count), turns)
+    }
+
+    func testSplittingAtAWordBoundaryPreservesTimings() {
+        let words = [TimedWord(text: "Bom", start: 1, end: 1.2),
+                     TimedWord(text: "dia.", start: 1.3, end: 1.6),
+                     TimedWord(text: "Olá.", start: 2, end: 2.4)]
+        let turns = [SpeakerTurn(speakerID: "speaker_0",
+                                 text: "Bom dia. Olá.",
+                                 timedWords: words)]
+        let split = SpeakerEditor.splitting(turns,
+                                            at: 0,
+                                            utf16Offset: "Bom dia.".utf16.count)
+
+        XCTAssertEqual(split[0].timedWords, Array(words[0...1]))
+        XCTAssertEqual(split[1].timedWords, [words[2]])
+        XCTAssertEqual(split[1].startTime, 2)
     }
 }

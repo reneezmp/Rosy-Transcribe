@@ -1,7 +1,9 @@
 # Rosy Transcribe
 
-A small macOS app that takes a dropped audio file, sends it to the ElevenLabs
-Scribe API, and shows a speaker-labelled transcript you can copy in one click.
+A small macOS app that records microphone and system audio—or takes an existing
+audio file—and produces a speaker-labelled transcript you can copy in one click. ElevenLabs Scribe works
+on every supported Mac; Apple-silicon Macs on macOS 26 or later can instead
+transcribe and diarize entirely on-device.
 
 Built for **Rosy** — a 2017 MacBook Retina 12" (Intel Core m3) on macOS Ventura
 13.7. That machine cannot run local ML models, which is the whole reason the
@@ -9,10 +11,10 @@ transcription happens over an API.
 
 - Deployment target: **macOS 13.0**
 - Architecture: **universal (arm64 + x86_64)**
-- Dependencies: **one** — [Sparkle][sparkle], for updates. Otherwise
-  Foundation, SwiftUI and AppKit only
+- Dependencies: **Sparkle**, for updates, and **FluidAudio**, for optional
+  local speaker diarisation
 - App Sandbox: **off** (personal tool, not an App Store submission)
-- Signing: ad-hoc, "sign to run locally"
+- Signing: self-signed with the local **Rosy Transcribe Local Signing** identity
 - Licence: MIT
 
 ## What you need
@@ -30,8 +32,15 @@ transcription happens over an API.
 A word on what you are uploading. This sends your audio to a third party, so
 for confidential recordings — the use this was written for — check ElevenLabs'
 retention and training terms against whatever duty of confidentiality you are
-under. The app deliberately keeps no copy of your audio, and transcripts stay
-in your own Application Support folder.
+  under. Imported audio remains wherever you placed it. Audio recorded by Rosy
+  and all transcripts stay in your own Application Support folder.
+
+The optional **On This Mac** engine needs Apple silicon and macOS 26 or later.
+It uses Apple's SpeechTranscriber for the words and FluidAudio's native Core ML
+diarizer for the speaker timeline. Apple and diarization models download on
+first use and are cached thereafter; the recording itself stays on the Mac.
+On Intel Macs or older macOS versions the choice is greyed out, with the reason
+shown in its help text. ElevenLabs remains available as before.
 
 ## Build
 
@@ -59,13 +68,26 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 
 ## Use
 
-1. Paste your ElevenLabs API key into the field at the top. It is stored in
-   the Keychain and remembered. The field is masked; the eye button reveals it.
-2. Pick a language, or leave it on Auto-detect.
-3. Optionally add key terms — see below. They are remembered too.
-4. Drop an audio file on the drop zone, or click it to pick one.
-5. Transcribe. Long recordings take several minutes — most of it is upload.
-6. Copy All.
+1. Start on **Home** and choose Voice Note, System Audio, Meeting, or Transcribe
+   a File. Meeting mode records the microphone and Mac audio separately;
+   headphones are strongly recommended to prevent doubled speech.
+2. Choose **ElevenLabs** or **On This Mac** in the Transcription menu. On This
+   Mac is available only on Apple silicon running macOS 26 or later.
+3. For ElevenLabs, click the key in the toolbar and paste your API key into its
+   popover. It is stored in the Keychain and remembered. The field is masked;
+   the eye button reveals it. Pressing Transcribe without a key opens this
+   popover automatically.
+4. Pick a language, or leave it on Auto-detect. In local mode, Auto uses the
+   Mac's current language because Apple Speech does not auto-detect languages.
+   If you know how many people are in the recording, choose that number under
+   **Expected speakers**; otherwise leave it on Auto.
+5. Optionally add key terms — see below. They currently apply to ElevenLabs.
+6. Transcribe. Long recordings can take several minutes.
+7. Copy All.
+
+The meeting title leads the window, with language beside it. Transcribe,
+Copy All and Save as Markdown live together in the right-hand action card,
+directly above the People panel.
 
 ## How it works
 
@@ -74,6 +96,7 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 | `RosyTranscribeApp.swift` | `@main`, a single window |
 | `ContentView.swift` | The whole UI, plus the `@MainActor` view model |
 | `TranscriptionService.swift` | The API call, timeouts, and error mapping |
+| `LocalTranscriptionService.swift` | Apple Speech + Core ML diarization and timeline alignment |
 | `MultipartBuilder.swift` | The `multipart/form-data` encoder |
 | `Models.swift` | `Codable` structs for the response |
 | `TranscriptFormatter.swift` | `words[]` → grouped speaker turns |
@@ -83,6 +106,8 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
 | `SpeakerEditor.swift` | Reassigning and editing segments, free of UI |
 | `TranscriptSearch.swift` | Finding text, free of UI |
 | `SegmentTextView.swift` | The editable, selectable, highlightable segment |
+| `AudioPlaybackService.swift` | Local playback, seeking, and playhead state |
+| `AudioRecordingService.swift` | Separate microphone/system capture, levels, permissions, and local recording storage |
 | `KeychainStore.swift` | The API key, and migration off `UserDefaults` |
 
 `TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
@@ -124,6 +149,18 @@ transcript with stray whitespace tokens and bracketed noises like `(laughter)`.
 `speaker_id` comes back as `speaker_0`, `speaker_1`, … assigned in order of
 first appearance — not by importance or by who talks most. It is displayed
 one-indexed, so `speaker_0` shows as "Speaker 1".
+
+### Local diarization tuning
+
+Local mode keeps moderately short replies and uses FluidAudio's conservative
+default clustering sensitivity. **Expected speakers** is an actual upper
+bound: when the diarizer creates too many aliases, Rosy compares their
+duration-weighted voice embeddings and repeatedly merges the closest pair.
+It cannot manufacture a speaker the diarizer missed, but it prevents a known
+four-person meeting from becoming fifteen apparent identities.
+Words are assigned only when a speaker interval overlaps them, or when a tiny
+and unambiguous boundary gap is close enough to bridge. Larger or equidistant
+gaps remain `Unknown` instead of being attributed to an arbitrary person.
 
 ### Limits
 
@@ -225,6 +262,12 @@ speaker on disk. A test pins them.
 Every segment is live. Click for a caret, drag to select, type to edit —
 there is no edit mode to enter or leave.
 
+Press **Return** at the caret to split that segment into two. The new segment
+inherits the same speaker, which creates a safe boundary around speech that
+diarization embedded inside somebody else's turn; right-click the isolated
+segment's speaker name to reassign it. Return at the very start or end does
+nothing rather than creating an empty row.
+
 That needs `NSTextView` (`SegmentTextView.swift`), because neither SwiftUI
 control can do it. `Text` is selectable but not editable. `TextField` is
 editable but cannot render highlighted ranges on macOS 13, so find-and-
@@ -306,9 +349,24 @@ Transcripts live in:
 One pretty-printed JSON file each, rather than a single library file. A write
 only ever risks the transcript being written, a file that somehow becomes
 unreadable costs one meeting rather than all of them, and any of them can be
-opened in a text editor. **The audio is not kept** — this app never opens it,
-and a library of meeting recordings is a much bigger thing to look after than
-a library of text.
+opened in a text editor. **The audio is not copied** — the transcript remembers
+only its original path, and a library of meeting recordings is a much bigger
+thing to look after than a library of text.
+
+## Audio playback
+
+When the original recording is still present, the transcript shows play/pause,
+a scrubber, elapsed time and duration. The play button beside any segment seeks
+to the moment that speaker turn began. **Option-click a word** to seek directly
+to that word without taking ordinary click, drag-selection or double-click away
+from the text editor.
+
+The app stores only the recording's path, never another copy of the recording.
+If the file has been moved or deleted, the transcript remains completely usable
+and shows **Playback Unavailable — Audio file not found**. **Relink Audio…**
+points the transcript at the file's new location and saves that path immediately.
+Older saved transcripts have no audio path or timestamps; they open normally
+and can be relinked for whole-file playback.
 
 ## Saving as Markdown
 
@@ -416,4 +474,4 @@ is a build nobody is ever offered.
 
 ## Not in v1 or v2, deliberately
 
-A settings screen, SRT output, progress percentage, audio playback.
+A settings screen, SRT output, progress percentage.

@@ -79,6 +79,7 @@ directly unit-tested:
 | `ContentView.swift` | `TranscriberModel` (`@MainActor`, all app state) plus every view |
 | `TranscriptionService.swift` | The API call, timeouts, error mapping |
 | `SegmentTextView.swift` | `NSTextView` wrapper for one transcript segment |
+| `AudioPlaybackService.swift` | `AVPlayer` wrapper for local playback and seeking |
 | `KeychainStore.swift` | The API key |
 
 **The test target compiles the pure sources directly** rather than importing the
@@ -125,6 +126,16 @@ data already on users' disks.
     ranges on macOS 13. Only `NSTextView` gives click-to-caret, drag-select,
     editing and search highlighting simultaneously — and it is the groundwork
     for click-a-word-to-seek.
+13. **Audio paths and word timings are optional.** Records from before playback
+    support contain neither and must continue to decode. The path points to the
+    user's recording; never copy meeting audio into the transcript library.
+14. **Missing audio is normal.** Keep the transcript usable, show “Playback
+    Unavailable — Audio file not found”, and offer Relink Audio. Never treat a
+    deleted post-meeting recording as a corrupt transcript.
+15. **Return splits a segment; it does not insert a newline.** Both halves keep
+    the original speaker so one can then be reassigned. Refuse empty edge
+    splits, and preserve word timings only when the split still matches an
+    exact boundary in the API's original words.
 
 ## The rename, and the two strings that carry data
 
@@ -167,24 +178,11 @@ phase.
 
 ## Roadmap
 
-**Audio playback, and click-a-word-to-play.** The app has never opened the
-audio — it uploads bytes and forgets them. Two things block this:
-
-- *Where the audio lives.* **Decided: store the path, never a copy.** The
-  recordings are meeting audio that gets deleted soon after transcribing, so
-  copying it into the library would keep privileged material alive longer than
-  its owner wants — the cheaper option is also the more careful one here.
-  The consequence is that a missing file is the *normal* end state, not an
-  edge case: say so plainly and offer to relocate, rather than treating it as
-  an error.
-- *The timestamps are thrown away.* `TranscriptFormatter.turns` keeps text and
-  speaker and discards each word's `start`/`end`. Per-word seeking needs them
-  kept, which changes the shape of a saved record.
-
-When it is built, **bind seeking to ⌥-click or a per-segment play button, not
-double-click** — double-click already means "select word" to the system, and
-fighting that breaks ordinary text behaviour. `SegmentTextView` is `NSTextView`
-partly so this is possible: it can map a click point to a character index.
+**Audio playback is built.** Records keep the source path and per-word timing;
+the app provides transport controls, per-segment play, Option-click word seek,
+and relinking when the original file moves. Editing a segment can make its word
+boundaries diverge from the API response; in that case seeking honestly falls
+back to the start of the segment rather than guessing.
 
 **Publishing an update.** `Tools/release.sh` does the build, the zip and the
 signature; it then prints an `<item>` to paste into `appcast.xml`. Both halves

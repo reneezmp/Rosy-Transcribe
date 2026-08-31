@@ -11,6 +11,13 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
     var title: String
     var createdAt: Date
     var sourceFilename: String
+    /// Path to the user's original recording. The audio itself is never
+    /// copied into the transcript library. Optional for pre-playback records.
+    var audioPath: String?
+    /// A separately recorded microphone track for meetings. Optional keeps
+    /// every transcript created before recording support fully compatible.
+    var secondaryAudioPath: String?
+    var recordingMode: RecordingMode?
     var detectedLanguage: String?
     var turns: [SpeakerTurn]
     var fallbackText: String
@@ -27,6 +34,9 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
          title: String = "",
          createdAt: Date = Date(),
          sourceFilename: String = "",
+         audioPath: String? = nil,
+         secondaryAudioPath: String? = nil,
+         recordingMode: RecordingMode? = nil,
          detectedLanguage: String? = nil,
          turns: [SpeakerTurn] = [],
          fallbackText: String = "",
@@ -37,6 +47,9 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
         self.title = title
         self.createdAt = createdAt
         self.sourceFilename = sourceFilename
+        self.audioPath = audioPath
+        self.secondaryAudioPath = secondaryAudioPath
+        self.recordingMode = recordingMode
         self.detectedLanguage = detectedLanguage
         self.turns = turns
         self.fallbackText = fallbackText

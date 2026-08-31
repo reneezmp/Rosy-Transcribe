@@ -38,6 +38,14 @@
 		1B000000000000000000001D /* SegmentTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* SegmentTextView.swift */; };
 		1B000000000000000000001E /* UpdaterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000016 /* UpdaterService.swift */; };
 		1B000000000000000000001F /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 230000000000000000000001 /* Sparkle */; };
+		1B0000000000000000000020 /* AudioPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000017 /* AudioPlaybackService.swift */; };
+		1B0000000000000000000021 /* LocalTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000018 /* LocalTranscriptionService.swift */; };
+		1B0000000000000000000022 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 230000000000000000000002 /* FluidAudio */; };
+		1B0000000000000000000023 /* LocalTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000018 /* LocalTranscriptionService.swift */; };
+		1B0000000000000000000024 /* LocalTranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000019 /* LocalTranscriptionTests.swift */; };
+		1B0000000000000000000025 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 230000000000000000000002 /* FluidAudio */; };
+		1B0000000000000000000026 /* AudioRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000001A /* AudioRecordingService.swift */; };
+		1B0000000000000000000027 /* AudioRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000001A /* AudioRecordingService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -63,6 +71,10 @@
 		1A0000000000000000000014 /* TranscriptSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSearchTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000000015 /* SegmentTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentTextView.swift; sourceTree = "<group>"; };
 		1A0000000000000000000016 /* UpdaterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000017 /* AudioPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000018 /* LocalTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriptionService.swift; sourceTree = "<group>"; };
+		1A0000000000000000000019 /* LocalTranscriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriptionTests.swift; sourceTree = "<group>"; };
+		1A000000000000000000001A /* AudioRecordingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecordingService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +82,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1B0000000000000000000022 /* FluidAudio in Frameworks */,
 				1B000000000000000000001F /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -78,6 +91,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1B0000000000000000000025 /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,6 +113,7 @@
 				1A0000000000000000000001 /* RosyTranscribeApp.swift */,
 				1A0000000000000000000002 /* ContentView.swift */,
 				1A0000000000000000000003 /* TranscriptionService.swift */,
+				1A0000000000000000000018 /* LocalTranscriptionService.swift */,
 				1A0000000000000000000004 /* MultipartBuilder.swift */,
 				1A0000000000000000000005 /* Models.swift */,
 				1A0000000000000000000006 /* TranscriptFormatter.swift */,
@@ -110,6 +125,8 @@
 				1A0000000000000000000013 /* TranscriptSearch.swift */,
 				1A0000000000000000000015 /* SegmentTextView.swift */,
 				1A0000000000000000000016 /* UpdaterService.swift */,
+				1A0000000000000000000017 /* AudioPlaybackService.swift */,
+				1A000000000000000000001A /* AudioRecordingService.swift */,
 				1A0000000000000000000012 /* Assets.xcassets */,
 			);
 			path = RosyTranscribe;
@@ -123,6 +140,7 @@
 				1A000000000000000000000D /* KeytermsTests.swift */,
 				1A0000000000000000000010 /* TranscriptRecordTests.swift */,
 				1A0000000000000000000014 /* TranscriptSearchTests.swift */,
+				1A0000000000000000000019 /* LocalTranscriptionTests.swift */,
 			);
 			path = RosyTranscribeTests;
 			sourceTree = "<group>";
@@ -154,6 +172,7 @@
 			name = RosyTranscribe;
 			packageProductDependencies = (
 				230000000000000000000001 /* Sparkle */,
+				230000000000000000000002 /* FluidAudio */,
 			);
 			productName = RosyTranscribe;
 			productReference = 1A0000000000000000000009 /* RosyTranscribe.app */;
@@ -172,6 +191,9 @@
 			dependencies = (
 			);
 			name = RosyTranscribeTests;
+			packageProductDependencies = (
+				230000000000000000000002 /* FluidAudio */,
+			);
 			productName = RosyTranscribeTests;
 			productReference = 1A000000000000000000000A /* RosyTranscribeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -205,6 +227,7 @@
 			mainGroup = 1C0000000000000000000001;
 			packageReferences = (
 				220000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				220000000000000000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 			);
 			productRefGroup = 1C0000000000000000000004 /* Products */;
 			projectDirPath = "";
@@ -245,6 +268,7 @@
 				1B0000000000000000000001 /* RosyTranscribeApp.swift in Sources */,
 				1B0000000000000000000006 /* TranscriptFormatter.swift in Sources */,
 				1B0000000000000000000003 /* TranscriptionService.swift in Sources */,
+				1B0000000000000000000021 /* LocalTranscriptionService.swift in Sources */,
 				1B000000000000000000000D /* Keyterms.swift in Sources */,
 				1B000000000000000000000E /* KeychainStore.swift in Sources */,
 				1B0000000000000000000011 /* SpeakerColor.swift in Sources */,
@@ -253,6 +277,8 @@
 				1B0000000000000000000019 /* TranscriptSearch.swift in Sources */,
 				1B000000000000000000001C /* SegmentTextView.swift in Sources */,
 				1B000000000000000000001E /* UpdaterService.swift in Sources */,
+				1B0000000000000000000020 /* AudioPlaybackService.swift in Sources */,
+				1B0000000000000000000026 /* AudioRecordingService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -275,6 +301,9 @@
 				1B000000000000000000001A /* TranscriptSearch.swift in Sources */,
 				1B000000000000000000001B /* TranscriptSearchTests.swift in Sources */,
 				1B000000000000000000001D /* SegmentTextView.swift in Sources */,
+				1B0000000000000000000023 /* LocalTranscriptionService.swift in Sources */,
+				1B0000000000000000000024 /* LocalTranscriptionTests.swift in Sources */,
+				1B0000000000000000000027 /* AudioRecordingService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -332,7 +361,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Rosy Transcribe Local Signing";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2;
@@ -344,6 +373,8 @@
 				INFOPLIST_KEY_SUPublicEDKey = "7Nh8jSxFmE2DGw3BGQ9YdIpM115AU743EXUuMA9fN3c=";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rosy Transcribe records your microphone for voice notes and meetings you choose to capture.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "Rosy Transcribe captures system audio when you choose System Audio or Meeting recording.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -361,7 +392,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "Rosy Transcribe Local Signing";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2;
@@ -373,6 +404,8 @@
 				INFOPLIST_KEY_SUPublicEDKey = "7Nh8jSxFmE2DGw3BGQ9YdIpM115AU743EXUuMA9fN3c=";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rosy Transcribe records your microphone for voice notes and meetings you choose to capture.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "Rosy Transcribe captures system audio when you choose System Audio or Meeting recording.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -461,6 +494,14 @@
 				minimumVersion = 2.6.0;
 			};
 		};
+		220000000000000000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.6.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -468,6 +509,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 220000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		230000000000000000000002 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 220000000000000000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

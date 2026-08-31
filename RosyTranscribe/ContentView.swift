@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 import UniformTypeIdentifiers
 
 // MARK: - View model
@@ -13,6 +14,8 @@ final class TranscriberModel: ObservableObject {
     private enum DefaultsKey {
         static let language = "transcriptionLanguage"
         static let keyterms = "keyterms"
+        static let engine = "transcriptionEngine"
+        static let expectedSpeakers = "expectedSpeakers"
     }
 
     // MARK: Settings
@@ -26,6 +29,16 @@ final class TranscriberModel: ObservableObject {
 
     @Published var language: TranscriptionLanguage {
         didSet { defaults.set(language.rawValue, forKey: DefaultsKey.language) }
+    }
+
+    @Published var engine: TranscriptionEngine {
+        didSet { defaults.set(engine.rawValue, forKey: DefaultsKey.engine) }
+    }
+
+    /// Zero means automatic. A known headcount adjusts the local clustering
+    /// sensitivity; it is irrelevant to ElevenLabs and hidden there.
+    @Published var expectedSpeakers: Int {
+        didSet { defaults.set(expectedSpeakers, forKey: DefaultsKey.expectedSpeakers) }
     }
 
     /// Free text: commas or newlines between terms. Not a secret, so plain
@@ -42,6 +55,17 @@ final class TranscriberModel: ObservableObject {
     @Published var selectedFile: URL?
     @Published var selectedFileSize: Int64?
     @Published var sourceFilename: String = ""
+    /// Only the path is retained. The recording remains entirely under the
+    /// user's control and may normally disappear after the meeting.
+    @Published var audioPath: String? {
+        didSet { scheduleSave() }
+    }
+    @Published var secondaryAudioPath: String? {
+        didSet { scheduleSave() }
+    }
+    @Published var recordingMode: RecordingMode? {
+        didSet { scheduleSave() }
+    }
     @Published var turns: [SpeakerTurn] = [] {
         didSet {
             scheduleSave()
@@ -97,13 +121,25 @@ final class TranscriberModel: ObservableObject {
     private let defaults: UserDefaults
     private let store: TranscriptStore
     private let service = TranscriptionService()
+    private let localService = LocalTranscriptionService()
+    let playback = AudioPlaybackService()
+    private var playbackCancellable: AnyCancellable?
 
     init(defaults: UserDefaults = .standard, store: TranscriptStore = TranscriptStore()) {
         self.defaults = defaults
         self.store = store
         self.language = TranscriptionLanguage(rawValue: defaults.string(forKey: DefaultsKey.language) ?? "")
             ?? .portuguese
+        let storedEngine = TranscriptionEngine(rawValue: defaults.string(forKey: DefaultsKey.engine) ?? "")
+            ?? .elevenLabs
+        self.engine = storedEngine == .onDevice && !LocalTranscriptionAvailability.isAvailable
+            ? .elevenLabs : storedEngine
+        let storedSpeakerCount = defaults.integer(forKey: DefaultsKey.expectedSpeakers)
+        self.expectedSpeakers = (2...8).contains(storedSpeakerCount) ? storedSpeakerCount : 0
         self.keytermsText = defaults.string(forKey: DefaultsKey.keyterms) ?? ""
+        self.audioPath = nil
+        self.secondaryAudioPath = nil
+        self.recordingMode = nil
         TranscriptStore.migrateRenamedDirectory()
         self.records = store.load()
 
@@ -118,6 +154,12 @@ final class TranscriberModel: ObservableObject {
             self.apiKey = ""
             self.keychainWarning = error.localizedDescription
         }
+
+        // Forward player ticks through the model so views observing this
+        // model redraw while the playhead moves.
+        self.playbackCancellable = playback.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
     }
 
     // MARK: Derived state
@@ -127,11 +169,33 @@ final class TranscriberModel: ObservableObject {
     }
 
     var canTranscribe: Bool {
-        selectedFile != nil && hasAPIKey && !isTranscribing && keytermsProblem == nil
+        guard selectedFile != nil, !isTranscribing else { return false }
+        switch engine {
+        case .elevenLabs: return hasAPIKey && keytermsProblem == nil
+        case .onDevice: return LocalTranscriptionAvailability.isAvailable
+        }
     }
 
     var hasTranscript: Bool {
         !turns.isEmpty || !fallbackText.isEmpty
+    }
+
+    var linkedAudioURL: URL? {
+        guard let audioPath, !audioPath.isEmpty else { return nil }
+        return URL(fileURLWithPath: audioPath)
+    }
+
+    var linkedAudioURLs: [URL] {
+        [audioPath, secondaryAudioPath]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .map(URL.init(fileURLWithPath:))
+    }
+
+    var isAudioAvailable: Bool {
+        !linkedAudioURLs.isEmpty && linkedAudioURLs.allSatisfy {
+            FileManager.default.fileExists(atPath: $0.path)
+        }
     }
 
     /// The transcript as plain text, for the pasteboard.
@@ -196,6 +260,8 @@ final class TranscriberModel: ObservableObject {
         // A dropped file is the start of a new transcript, not an edit of the
         // one on screen.
         beginNewRecord()
+        audioPath = url.path
+        preparePlayback()
         // Seed the title from the filename, but never overwrite one already
         // typed.
         if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -216,6 +282,26 @@ final class TranscriberModel: ObservableObject {
         }
     }
 
+    /// Makes a Rosy-created recording the source for a new transcript. A
+    /// meeting retains both paths; ordinary recordings retain one.
+    func selectRecording(_ recording: RecordedAudio) {
+        guard let primary = recording.primaryURL else { return }
+        beginNewRecord()
+        selectedFile = primary
+        selectedFileSize = (try? primary.resourceValues(forKeys: [.fileSizeKey]))
+            .flatMap { $0.fileSize }
+            .map(Int64.init)
+        sourceFilename = primary.lastPathComponent
+        audioPath = primary.path
+        if recording.mode == .meeting {
+            secondaryAudioPath = recording.microphoneURL?.path
+        }
+        recordingMode = recording.mode
+        title = recording.title
+        errorMessage = nil
+        preparePlayback()
+    }
+
     // MARK: Transcribing
 
     func transcribe() async {
@@ -227,18 +313,68 @@ final class TranscriberModel: ObservableObject {
         defer { isTranscribing = false }
 
         do {
-            let terms = try Keyterms.validated(keytermsText)
-            let request = TranscriptionRequest(fileURL: fileURL,
-                                               apiKey: apiKey,
-                                               languageCode: language.languageCode,
-                                               keyterms: terms)
-            let response = try await service.transcribe(request)
+            let response: TranscriptionResponse
+            var microphoneResponse: TranscriptionResponse?
+            let microphoneURL = secondaryAudioPath.map(URL.init(fileURLWithPath:))
+            let isMicrophoneOnly = recordingMode == .microphone
+            switch engine {
+            case .elevenLabs:
+                let terms = try Keyterms.validated(keytermsText)
+                let request = TranscriptionRequest(fileURL: fileURL,
+                                                   apiKey: apiKey,
+                                                   languageCode: language.languageCode,
+                                                   keyterms: terms,
+                                                   diarize: !isMicrophoneOnly)
+                if let microphoneURL {
+                    async let primary = service.transcribe(request)
+                    async let microphone = service.transcribe(
+                        TranscriptionRequest(fileURL: microphoneURL,
+                                             apiKey: apiKey,
+                                             languageCode: language.languageCode,
+                                             keyterms: terms,
+                                             diarize: false)
+                    )
+                    (response, microphoneResponse) = try await (primary, microphone)
+                } else {
+                    response = try await service.transcribe(request)
+                }
+            case .onDevice:
+                response = try await localService.transcribe(
+                    fileURL: fileURL,
+                    language: language,
+                    expectedSpeakers: expectedSpeakers == 0 ? nil : expectedSpeakers
+                )
+                // Run sequentially locally: two simultaneous SpeechAnalyzer +
+                // diariser pipelines needlessly double peak memory.
+                if let microphoneURL {
+                    microphoneResponse = try await localService.transcribe(
+                        fileURL: microphoneURL,
+                        language: language,
+                        expectedSpeakers: nil
+                    )
+                }
+            }
 
             isLoadingRecord = true
-            turns = TranscriptFormatter.turns(from: response.words ?? [])
-            fallbackText = response.text
+            var words = response.words ?? []
+            if isMicrophoneOnly {
+                words = Self.forcingSpeaker("speaker_local", in: words)
+            }
+            if let microphoneResponse {
+                words += Self.forcingSpeaker("speaker_local", in: microphoneResponse.words ?? [])
+                words.sort { ($0.start ?? .greatestFiniteMagnitude) < ($1.start ?? .greatestFiniteMagnitude) }
+            }
+            turns = TranscriptFormatter.turns(from: words)
+            if let microphoneResponse, words.isEmpty {
+                fallbackText = "Others:\n\(response.text)\n\nYou:\n\(microphoneResponse.text)"
+            } else {
+                fallbackText = response.text
+            }
             speakerOrder = TranscriptFormatter.speakerIDs(in: turns)
             speakerColors = SpeakerColor.assign(to: speakerOrder)
+            if speakerOrder.contains("speaker_local") {
+                speakerNames["speaker_local"] = "You"
+            }
             detectedLanguage = Self.describeLanguage(response)
             sourceFilename = fileURL.lastPathComponent
             isLoadingRecord = false
@@ -257,6 +393,17 @@ final class TranscriberModel: ObservableObject {
         }
     }
 
+    private static func forcingSpeaker(_ speakerID: String,
+                                       in words: [TranscriptionWord]) -> [TranscriptionWord] {
+        words.map {
+            TranscriptionWord(type: $0.type,
+                              text: $0.text,
+                              start: $0.start,
+                              end: $0.end,
+                              speakerId: speakerID)
+        }
+    }
+
     // MARK: The library
 
     func open(_ id: UUID) {
@@ -267,6 +414,9 @@ final class TranscriberModel: ObservableObject {
         currentCreatedAt = record.createdAt
         title = record.title
         sourceFilename = record.sourceFilename
+        audioPath = record.audioPath
+        secondaryAudioPath = record.secondaryAudioPath
+        recordingMode = record.recordingMode
         detectedLanguage = record.detectedLanguage
         turns = record.turns
         fallbackText = record.fallbackText
@@ -277,6 +427,7 @@ final class TranscriberModel: ObservableObject {
         selectedFileSize = nil
         errorMessage = nil
         isLoadingRecord = false
+        preparePlayback()
     }
 
     func newTranscription() {
@@ -332,6 +483,10 @@ final class TranscriberModel: ObservableObject {
                 set: { self.turns = SpeakerEditor.replacingText(self.turns, at: index, with: $0) })
     }
 
+    func splitTurn(at index: Int, utf16Offset: Int) {
+        turns = SpeakerEditor.splitting(turns, at: index, utf16Offset: utf16Offset)
+    }
+
     /// Returns true when the segment was emptied and therefore removed.
     @discardableResult
     func commitEdit(at index: Int) -> Bool {
@@ -383,6 +538,64 @@ final class TranscriberModel: ObservableObject {
         speakerColors[speakerID] = nil
     }
 
+    // MARK: Audio playback
+
+    func togglePlayback() {
+        guard preparePlayback() else { return }
+        playback.togglePlayback()
+    }
+
+    func play(turnAt index: Int) {
+        guard turns.indices.contains(index),
+              let start = turns[index].startTime,
+              preparePlayback() else { return }
+        playback.play(from: start)
+    }
+
+    func play(turnAt index: Int, characterOffset: Int) {
+        guard turns.indices.contains(index),
+              let start = turns[index].timestamp(atUTF16Offset: characterOffset),
+              preparePlayback() else { return }
+        playback.play(from: start)
+    }
+
+    /// Lets a transcript inherit a moved recording without copying it.
+    func relinkAudio() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Relink"
+        panel.message = "Choose the audio file that belongs to this transcript"
+        panel.allowedContentTypes = Self.allowedContentTypes
+        if let linkedAudioURL {
+            panel.directoryURL = linkedAudioURL.deletingLastPathComponent()
+            panel.nameFieldStringValue = linkedAudioURL.lastPathComponent
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard isAcceptableFile(url) else {
+            errorMessage = "\(url.lastPathComponent) does not look like a supported audio or video file."
+            return
+        }
+        audioPath = url.path
+        sourceFilename = url.lastPathComponent
+        preparePlayback()
+        saveCurrentRecord()
+        errorMessage = nil
+    }
+
+    @discardableResult
+    private func preparePlayback() -> Bool {
+        let urls = linkedAudioURLs
+        guard !urls.isEmpty,
+              urls.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
+            playback.unload()
+            return false
+        }
+        playback.load(urls)
+        return true
+    }
+
     func initial(for speakerID: String) -> String {
         TranscriptFormatter.initial(for: speakerID, names: speakerNames)
     }
@@ -426,6 +639,9 @@ final class TranscriberModel: ObservableObject {
                          title: title,
                          createdAt: currentCreatedAt,
                          sourceFilename: sourceFilename,
+                         audioPath: audioPath,
+                         secondaryAudioPath: secondaryAudioPath,
+                         recordingMode: recordingMode,
                          detectedLanguage: detectedLanguage,
                          turns: turns,
                          fallbackText: fallbackText,
@@ -460,6 +676,10 @@ final class TranscriberModel: ObservableObject {
         currentRecordID = nil
         currentCreatedAt = Date()
         sourceFilename = ""
+        audioPath = nil
+        secondaryAudioPath = nil
+        recordingMode = nil
+        playback.unload()
         clearTranscript()
     }
 
@@ -539,17 +759,37 @@ extension SpeakerColor {
 
 // MARK: - View
 
+private enum WorkspacePage: Equatable {
+    case home
+    case transcription
+    case recording
+}
+
+private enum HomeAction: Hashable {
+    case microphone
+    case systemAudio
+    case meeting
+    case file
+}
+
 struct ContentView: View {
 
     @StateObject private var model = TranscriberModel()
+    @StateObject private var recorder = AudioRecordingService()
+    @State private var page: WorkspacePage = .home
+    @State private var recordingMode: RecordingMode = .microphone
+    @State private var recordingTitle = ""
+    @State private var showLeaveRecordingWarning = false
+    @State private var hoveredHomeAction: HomeAction?
     @State private var isDropTargeted = false
     @State private var isKeyVisible = false
+    @State private var isKeyPopoverPresented = false
     @State private var hoveredSpeaker: String?
     @FocusState private var focusedSpeaker: String?
     @State private var isSearching = false
     @FocusState private var searchFocused: Bool
 
-    private let speakerColumnWidth: CGFloat = 120
+    private let speakerColumnWidth: CGFloat = 104
 
     // MARK: Search
 
@@ -575,11 +815,64 @@ struct ContentView: View {
         searchFocused = false
     }
 
+    private func requestTranscription() {
+        guard model.engine != .elevenLabs || model.hasAPIKey else {
+            isKeyPopoverPresented = true
+            return
+        }
+        Task { await model.transcribe() }
+    }
+
+    private func goHome() {
+        if recorder.state == .recording || recorder.state == .starting || recorder.state == .finishing {
+            showLeaveRecordingWarning = true
+        } else {
+            page = .home
+        }
+    }
+
+    private func beginRecording(_ mode: RecordingMode) {
+        recorder.reset()
+        recordingMode = mode
+        recordingTitle = ""
+        page = .recording
+    }
+
+    private func beginFileTranscription() {
+        model.newTranscription()
+        page = .transcription
+    }
+
+    private func useFinishedRecording() {
+        guard let result = recorder.result else { return }
+        model.selectRecording(result)
+        page = .transcription
+    }
+
     var body: some View {
         NavigationSplitView {
             sidebar
         } detail: {
-            main
+            Group {
+                switch page {
+                case .home: homePage
+                case .transcription: transcriptionPage
+                case .recording: recordingPage
+                }
+            }
+            .frame(minWidth: 640, idealWidth: 1040, minHeight: 400, idealHeight: 680)
+            .toolbar { workspaceToolbar }
+            .alert("Stop this recording?", isPresented: $showLeaveRecordingWarning) {
+                Button("Keep Recording", role: .cancel) {}
+                Button("Stop and Discard", role: .destructive) {
+                    Task {
+                        await recorder.discard()
+                        page = .home
+                    }
+                }
+            } message: {
+                Text("Going Home would interrupt the recording. The captured audio will be discarded.")
+            }
         }
     }
 
@@ -587,6 +880,30 @@ struct ContentView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
+            Button {
+                goHome()
+            } label: {
+                Label("Home", systemImage: "house.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(page == .home ? Color.accentColor.opacity(0.16) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+
+            HStack {
+                Text("Transcriptions")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+
             if model.records.isEmpty {
                 // Centred with a flexible frame rather than two Spacers, which
                 // would demand unbounded height the way the People panel did.
@@ -597,8 +914,13 @@ struct ContentView: View {
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: Binding(get: { model.currentRecordID },
-                                        set: { if let id = $0, id != model.currentRecordID { model.open(id) } })) {
+                List(selection: Binding(get: { page == .transcription ? model.currentRecordID : nil },
+                                        set: {
+                                            if let id = $0 {
+                                                if id != model.currentRecordID { model.open(id) }
+                                                page = .transcription
+                                            }
+                                        })) {
                     ForEach(model.records) { record in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(record.displayTitle)
@@ -622,34 +944,49 @@ struct ContentView: View {
 
     // MARK: Main
 
-    private var main: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // The drop zone sits beside the fields rather than below them, so
-            // the transcript gets the vertical space instead.
-            HStack(alignment: .top, spacing: 14) {
+    private var transcriptionPage: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            pageHeader("Transcription")
+            HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 10) {
-                    settings
-                    titleField
+                    titleAndLanguage
+                    keytermsField
                 }
                 dropZone
-                    .frame(width: 200, height: 200)
+                    // Same width and gutter as the action/People rail below,
+                    // so the whole interface sits on one visible grid.
+                    .frame(width: 230, height: 142)
             }
-            controls
+            // These rows must never surrender their height to a long People
+            // list. When they were compressed, their contents still painted
+            // at full size and the playback bar crossed the transcript.
+            .fixedSize(horizontal: false, vertical: true)
             banners
-            if isSearching { searchBar }
+                .fixedSize(horizontal: false, vertical: true)
+            if isSearching {
+                searchBar
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if model.hasTranscript {
+                audioControls
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack(alignment: .top, spacing: 12) {
                 transcriptBox
-                // Shown whenever there is a transcript, not only when there
-                // are speakers: deleting the last one must still leave Add
-                // Speaker reachable.
-                if model.hasTranscript {
-                    peoplePanel
-                        .frame(width: 210)
+                VStack(spacing: 10) {
+                    actionPanel
+                    // Shown whenever there is a transcript, not only when
+                    // speakers exist: Add Speaker must remain reachable.
+                    if model.hasTranscript {
+                        peoplePanel
+                    }
                 }
+                .frame(width: 230)
             }
             // Takes the leftover height, but with a bounded *ideal* height so
             // the window does not try to size itself to fit a whole meeting.
             .frame(minHeight: 140, idealHeight: 300, maxHeight: .infinity)
+            .layoutPriority(1)
         }
         .padding(18)
         // Clicking any empty part of the window finishes a rename. Controls
@@ -663,10 +1000,22 @@ struct ContentView: View {
         // bar and the title bar are gone. A 700pt minimum plus padding was
         // taller than that, so the window could not be shortened at all and
         // sprang back to full height whenever it was moved.
-        .frame(minWidth: 640, idealWidth: 1040, minHeight: 400, idealHeight: 680)
-        // NavigationSplitView provides its own sidebar toggle; adding one
-        // here produced two.
-        .toolbar {
+    }
+
+    @ToolbarContentBuilder
+    private var workspaceToolbar: some ToolbarContent {
+        if page == .transcription {
+            ToolbarItem {
+                Button {
+                    isKeyPopoverPresented.toggle()
+                } label: {
+                    Image(systemName: model.hasAPIKey ? "key.fill" : "key")
+                }
+                .help(model.hasAPIKey ? "ElevenLabs API key" : "Add ElevenLabs API key")
+                .popover(isPresented: $isKeyPopoverPresented, arrowEdge: .bottom) {
+                    apiKeyPopover
+                }
+            }
             ToolbarItem {
                 Button {
                     openSearch()
@@ -685,6 +1034,7 @@ struct ContentView: View {
             ToolbarItem {
                 Button {
                     model.newTranscription()
+                    page = .transcription
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
@@ -693,71 +1043,436 @@ struct ContentView: View {
         }
     }
 
-    // MARK: Settings
+    // MARK: Home
 
-    private var settings: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("ElevenLabs API key")
-                    .font(.subheadline)
+    private var homePage: some View {
+        VStack(spacing: 24) {
+            VStack(spacing: 6) {
+                Text("What shall we capture?")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                Text("Record something new, or bring Rosy a file you already have.")
+                    .font(.title3)
                     .foregroundStyle(.secondary)
-                HStack(spacing: 6) {
-                    // Masked by default, so the key does not end up in a
-                    // screenshot. Revealable, because a pasted key you cannot
-                    // see is a key you cannot check for a stray space.
-                    Group {
-                        if isKeyVisible {
-                            TextField("xi-api-key", text: $model.apiKey)
-                        } else {
-                            SecureField("xi-api-key", text: $model.apiKey)
-                        }
-                    }
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-
-                    Button {
-                        isKeyVisible.toggle()
-                    } label: {
-                        Image(systemName: isKeyVisible ? "eye.slash" : "eye")
-                    }
-                    .buttonStyle(.borderless)
-                    .help(isKeyVisible ? "Hide the key" : "Show the key")
-                }
             }
+            .multilineTextAlignment(.center)
 
-            Picker("Language", selection: $model.language) {
-                ForEach(TranscriptionLanguage.allCases) { language in
-                    Text(language.displayName).tag(language)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14),
+                                GridItem(.flexible(), spacing: 14)], spacing: 14) {
+                homeAction(mode: .microphone,
+                           action: .microphone,
+                           tint: Color(red: 0.88, green: 0.46, blue: 0.53))
+                homeAction(mode: .systemAudio,
+                           action: .systemAudio,
+                           tint: Color(red: 0.78, green: 0.38, blue: 0.48))
+                homeAction(mode: .meeting,
+                           action: .meeting,
+                           tint: Color(red: 0.82, green: 0.57, blue: 0.39))
+
+                Button(action: beginFileTranscription) {
+                    homeCard(symbol: "waveform.badge.plus",
+                             title: "Transcribe a File",
+                             detail: "Choose an existing audio or video file.",
+                             tint: Color(red: 0.91, green: 0.54, blue: 0.57),
+                             isHovered: hoveredHomeAction == .file)
                 }
+                .buttonStyle(.plain)
+                .onHover { setHomeHover(.file, hovering: $0) }
             }
-            .pickerStyle(.menu)
-            .fixedSize()
+            .frame(maxWidth: 760)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Key terms")
-                    .font(.subheadline)
+            Spacer()
+        }
+        .padding(34)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func homeAction(mode: RecordingMode, action: HomeAction, tint: Color) -> some View {
+        Button { beginRecording(mode) } label: {
+            homeCard(symbol: mode.symbol,
+                     title: mode.title,
+                     detail: mode.detail,
+                     tint: tint,
+                     isHovered: hoveredHomeAction == action)
+        }
+        .buttonStyle(.plain)
+        .onHover { setHomeHover(action, hovering: $0) }
+    }
+
+    private func setHomeHover(_ action: HomeAction, hovering: Bool) {
+        if hovering {
+            hoveredHomeAction = action
+        } else if hoveredHomeAction == action {
+            hoveredHomeAction = nil
+        }
+    }
+
+    private func homeCard(symbol: String,
+                          title: String,
+                          detail: String,
+                          tint: Color,
+                          isHovered: Bool) -> some View {
+        HStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 13)
+                    .fill(tint.opacity(isHovered ? 0.28 : 0.16))
+                Image(systemName: symbol)
+                    .font(.system(size: 25, weight: .medium))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 58, height: 58)
+            .scaleEffect(isHovered ? 1.06 : 1)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(detail)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                TextField("proferida, averbação, embargos de terceiros, Dr. Silva",
-                          text: $model.keytermsText,
-                          axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(2...4)
-                Text(model.keytermsProblem ?? model.keytermsSummary)
-                    .font(.caption)
-                    .foregroundStyle(model.keytermsProblem == nil ? Color.secondary : Color.red)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .center)
+        .background(
+            RoundedRectangle(cornerRadius: 15)
+                .fill(isHovered ? tint.opacity(0.16) : Color.gray.opacity(0.09))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(isHovered ? tint.opacity(0.72) : Color.gray.opacity(0.16),
+                        lineWidth: isHovered ? 1.5 : 1)
+        )
+        .shadow(color: isHovered ? tint.opacity(0.16) : .clear,
+                radius: isHovered ? 10 : 0,
+                y: 4)
+        .contentShape(RoundedRectangle(cornerRadius: 15))
+        .animation(.easeOut(duration: 0.16), value: isHovered)
+    }
+
+    // MARK: Recording
+
+    private var recordingPage: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            pageHeader(recordingMode.title)
+                .padding(18)
+
+            VStack(spacing: 18) {
+                recordingHero
+                recordingControls
+            }
+            .frame(maxWidth: 560)
+            .padding(30)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var recordingHero: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(recordingTint.opacity(0.16))
+                Image(systemName: recorder.state == .recording ? "waveform" : recordingMode.symbol)
+                    .font(.system(size: 42, weight: .medium))
+                    .foregroundStyle(recordingTint)
+            }
+            .frame(width: 108, height: 108)
+
+            Text(recordingStatusTitle)
+                .font(.title2.weight(.semibold))
+
+            if recorder.state == .recording || recorder.state == .finishing || recorder.state == .finished {
+                Text(Self.recordingTime(recorder.elapsed))
+                    .font(.system(size: 34, weight: .medium, design: .rounded).monospacedDigit())
+            } else {
+                Text(recordingMode.detail)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            if recorder.state == .recording {
+                audioMeters
             }
         }
     }
 
-    private var titleField: some View {
+    @ViewBuilder
+    private var recordingControls: some View {
+        switch recorder.state {
+        case .idle, .failed:
+            VStack(spacing: 14) {
+                TextField("Recording title", text: $recordingTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body)
+
+                if recordingMode == .meeting {
+                    Label {
+                        Text("Use earphones or headphones. Otherwise the microphone hears the other participants twice, which damages transcription and speaker separation.")
+                    } icon: {
+                        Image(systemName: "headphones")
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.10)))
+                }
+
+                if let error = recorder.errorMessage {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(error)
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if recorder.systemAudioPermissionDenied {
+                            Button {
+                                recorder.openSystemAudioPrivacySettings()
+                            } label: {
+                                Label("Open Recording Settings", systemImage: "gear")
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.red.opacity(0.08)))
+                }
+
+                Button {
+                    Task { await recorder.start(mode: recordingMode, title: recordingTitle) }
+                } label: {
+                    Label("Start Recording", systemImage: "record.circle")
+                        .frame(minWidth: 150)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+
+        case .starting:
+            VStack(spacing: 10) {
+                ProgressView()
+                Text("Requesting permission and preparing the audio tracks…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+        case .recording:
+            Button {
+                Task { await recorder.stop() }
+            } label: {
+                Label("Finish Recording", systemImage: "stop.fill")
+                    .frame(minWidth: 160)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .controlSize(.large)
+
+        case .finishing:
+            VStack(spacing: 10) {
+                ProgressView()
+                Text("Finishing the audio files safely…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+        case .finished:
+            VStack(spacing: 12) {
+                Text(recordingMode == .meeting
+                     ? "Two separate tracks are ready: your microphone and the Mac's audio."
+                     : "Your recording is ready to transcribe.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                HStack(spacing: 10) {
+                    Button {
+                        Task {
+                            await recorder.discard()
+                            page = .home
+                        }
+                    } label: {
+                        Label("Discard", systemImage: "trash")
+                    }
+                    .tint(.red)
+
+                    Button(action: useFinishedRecording) {
+                        Label("Continue to Transcription", systemImage: "waveform")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .controlSize(.large)
+            }
+        }
+    }
+
+    private var audioMeters: some View {
+        VStack(spacing: 8) {
+            if recordingMode.needsMicrophone {
+                levelRow(label: "Microphone", symbol: "mic.fill", value: recorder.microphoneLevel)
+            }
+            if recordingMode.needsSystemAudio {
+                levelRow(label: "Mac audio", symbol: "speaker.wave.2.fill", value: recorder.systemLevel)
+            }
+        }
+        .frame(maxWidth: 360)
+    }
+
+    private func levelRow(label: String, symbol: String, value: Double) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: symbol)
+                .frame(width: 18)
+            Text(label)
+                .font(.caption)
+                .frame(width: 76, alignment: .leading)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.gray.opacity(0.18))
+                    Capsule().fill(recordingTint)
+                        .frame(width: geometry.size.width * max(0.025, value))
+                }
+            }
+            .frame(height: 7)
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    private var recordingTint: Color {
+        if recorder.state == .recording { return .red }
+        switch recordingMode {
+        case .microphone: return .blue
+        case .systemAudio: return .purple
+        case .meeting: return .orange
+        }
+    }
+
+    private var recordingStatusTitle: String {
+        switch recorder.state {
+        case .idle: return "New \(recordingMode.title)"
+        case .starting: return "Getting Ready…"
+        case .recording: return "Recording"
+        case .finishing: return "Saving…"
+        case .finished: return recorder.result?.title ?? recordingMode.title
+        case .failed: return "Could Not Start Recording"
+        }
+    }
+
+    private func pageHeader(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            Button(action: goHome) {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 26, height: 26)
+            }
+            .buttonStyle(.borderless)
+            .help("Back to Home")
+            Text(title)
+                .font(.headline)
+            Spacer()
+        }
+    }
+
+    private static func recordingTime(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded(.down)))
+        if total >= 3600 {
+            return String(format: "%d:%02d:%02d", total / 3600, (total / 60) % 60, total % 60)
+        }
+        return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    // MARK: Meeting details
+
+    private var titleAndLanguage: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Meeting title")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TextField("Named after the file until you change it", text: $model.title)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Language")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: $model.language) {
+                    ForEach(TranscriptionLanguage.allCases) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 132, alignment: .trailing)
+            }
+            .frame(width: 132, alignment: .leading)
+        }
+    }
+
+    private var keytermsField: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Title")
+            Text("Key terms")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            TextField("Named after the file until you change it", text: $model.title)
+            TextField("proferida, averbação, embargos de terceiros, Dr. Silva",
+                      text: $model.keytermsText,
+                      axis: .vertical)
                 .textFieldStyle(.roundedBorder)
+                .lineLimit(2...3)
+                .disabled(model.engine == .onDevice)
+            Text(model.engine == .onDevice
+                 ? "Key terms currently apply to ElevenLabs only."
+                 : (model.keytermsProblem ?? model.keytermsSummary))
+                .font(.caption)
+                .foregroundStyle(model.engine == .onDevice || model.keytermsProblem == nil
+                                 ? Color.secondary : Color.red)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var apiKeyPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "key.fill")
+                    .foregroundStyle(Color.accentColor)
+                Text("ElevenLabs API Key")
+                    .font(.headline)
+                Spacer()
+                if model.hasAPIKey {
+                    Label("Saved", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+            }
+
+            HStack(spacing: 7) {
+                Group {
+                    if isKeyVisible {
+                        TextField("xi-api-key", text: $model.apiKey)
+                    } else {
+                        SecureField("xi-api-key", text: $model.apiKey)
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+
+                Button {
+                    isKeyVisible.toggle()
+                } label: {
+                    Image(systemName: isKeyVisible ? "eye.slash" : "eye")
+                }
+                .buttonStyle(.borderless)
+                .help(isKeyVisible ? "Hide the key" : "Show the key")
+            }
+
+            Text("Stored securely in your login Keychain.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(width: 360)
     }
 
     // MARK: Drop zone
@@ -813,42 +1528,114 @@ struct ContentView: View {
         } isTargeted: { isDropTargeted = $0 }
     }
 
-    // MARK: Controls
+    // MARK: Actions
 
-    private var controls: some View {
-        HStack(spacing: 12) {
+    private var actionPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Transcription")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Transcription", selection: $model.engine) {
+                    ForEach(TranscriptionEngine.allCases) { engine in
+                        VStack(alignment: .leading) {
+                            Text(engine.displayName)
+                            Text(engine.detail)
+                        }
+                        .tag(engine)
+                        .disabled(engine == .onDevice && !LocalTranscriptionAvailability.isAvailable)
+                        .help(engine == .onDevice
+                              ? LocalTranscriptionAvailability.explanation
+                              : "Transcribes with ElevenLabs Scribe v2.")
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity)
+                .help(model.engine == .onDevice
+                      ? LocalTranscriptionAvailability.explanation
+                      : "Choose where the audio is transcribed.")
+            }
+
+            if model.engine == .onDevice {
+                HStack {
+                    Text("Expected speakers")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("Expected speakers", selection: $model.expectedSpeakers) {
+                        Text("Auto").tag(0)
+                        ForEach(2...8, id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 68)
+                    .help("If local diarisation finds too many identities, Rosy merges the closest voices down to this number.")
+                }
+            }
+
             Button {
-                Task { await model.transcribe() }
+                requestTranscription()
             } label: {
-                Text(model.isTranscribing ? "Transcribing…" : "Transcribe")
-                    .frame(minWidth: 90)
+                HStack {
+                    if model.isTranscribing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "waveform")
+                    }
+                    Text(model.isTranscribing ? "Transcribing…" : "Transcribe")
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(!model.canTranscribe)
+            // Keep the button clickable when only the key is missing: that
+            // click is what opens the key popover and explains what is needed.
+            .disabled(model.selectedFile == nil || model.isTranscribing
+                      || (model.engine == .elevenLabs && model.keytermsProblem != nil))
 
-            // Status sits beside the button rather than above the transcript,
-            // so the transcript and People boxes start at the same height.
-            if model.isTranscribing {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Uploading and transcribing. Long recordings can take several minutes.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            } else if let language = model.detectedLanguage {
-                Text("Detected language: \(language)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            Button {
+                model.copyTranscript()
+            } label: {
+                Label("Copy All", systemImage: "doc.on.doc")
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .disabled(!model.hasTranscript)
 
-            Spacer()
+            Button {
+                model.saveMarkdown()
+            } label: {
+                Label("Save as Markdown…", systemImage: "square.and.arrow.down")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .disabled(!model.hasTranscript)
 
-            Button("Save as Markdown…") { model.saveMarkdown() }
-                .disabled(!model.hasTranscript)
-            Button("Copy All") { model.copyTranscript() }
-                .disabled(!model.hasTranscript)
+            if model.isTranscribing {
+                Text(model.engine == .onDevice
+                     ? "Transcribing and separating speakers on this Mac. The first run downloads the local models."
+                     : "Uploading and transcribing. Long recordings can take several minutes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let language = model.detectedLanguage {
+                Text("Detected: \(language)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if model.engine == .elevenLabs && !model.hasAPIKey {
+                Label("API key required", systemImage: "key")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if model.engine == .onDevice {
+                Label("Audio stays on this Mac", systemImage: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(11)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.07)))
     }
 
     private var banners: some View {
@@ -873,6 +1660,77 @@ struct ContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    // MARK: Playback
+
+    private var audioControls: some View {
+        Group {
+            if model.isAudioAvailable {
+                HStack(spacing: 10) {
+                    Button {
+                        model.togglePlayback()
+                    } label: {
+                        Image(systemName: model.playback.isPlaying ? "pause.fill" : "play.fill")
+                            .frame(width: 16)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(model.playback.isPlaying ? "Pause" : "Play")
+
+                    Text(Self.playbackTime(model.playback.currentTime))
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 42, alignment: .trailing)
+
+                    Slider(value: Binding(get: { model.playback.currentTime },
+                                          set: { model.playback.seek(to: $0) }),
+                           in: 0...max(model.playback.duration, 0.01))
+                        .disabled(model.playback.duration <= 0)
+
+                    Text(Self.playbackTime(model.playback.duration))
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 42, alignment: .leading)
+
+                    Text(model.linkedAudioURL?.lastPathComponent ?? "Audio")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Button("Relink…") { model.relinkAudio() }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform.slash")
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Playback Unavailable — Audio file not found")
+                            .font(.callout.weight(.medium))
+                        if let path = model.audioPath {
+                            Text(path)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    Spacer()
+                    Button("Relink Audio…") { model.relinkAudio() }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.09)))
+            }
+        }
+    }
+
+    private static func playbackTime(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
+        let total = Int(seconds.rounded(.down))
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     private var searchBar: some View {
@@ -925,7 +1783,7 @@ struct ContentView: View {
             ScrollView {
                 // Lazy, because a forty-minute meeting is hundreds of turns and
                 // Rosy is a dual-core Intel.
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: 9) {
                     if model.turns.isEmpty {
                         Text(model.fallbackText.isEmpty
                              ? "The transcript will appear here."
@@ -980,7 +1838,7 @@ struct ContentView: View {
             // merged block while hiding that the space is right-clickable.
             // Joining adjacent segments is an output concern and stays in
             // `TranscriptFormatter.merged`.
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: 7) {
                 Text(model.displayName(for: turn.speakerID))
                     .font(.system(.body, design: .monospaced).weight(.semibold))
                     .foregroundStyle(turn.speakerID == nil
@@ -993,6 +1851,20 @@ struct ContentView: View {
                     .contentShape(Rectangle())
                     .contextMenu { reassignmentMenu(for: index) }
 
+                if turn.startTime != nil {
+                    Button {
+                        model.play(turnAt: index)
+                    } label: {
+                        Image(systemName: "play.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .frame(width: 18)
+                    .disabled(!model.isAudioAvailable)
+                    .help(model.isAudioAvailable
+                          ? "Play from this segment"
+                          : "Audio file not found — relink it to restore playback")
+                }
+
                 // Always live: click for a caret, drag to select, type to
                 // edit, and search matches stay highlighted throughout.
                 SegmentTextView(text: model.textBinding(at: index),
@@ -1000,6 +1872,12 @@ struct ContentView: View {
                                 textColor: .labelColor,
                                 highlights: highlights,
                                 currentHighlight: current,
+                                onOptionClick: { offset in
+                                    model.play(turnAt: index, characterOffset: offset)
+                                },
+                                onSplit: { offset in
+                                    model.splitTurn(at: index, utf16Offset: offset)
+                                },
                                 onEditingEnded: { model.commitEdit(at: index) })
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -1048,25 +1926,31 @@ struct ContentView: View {
     // MARK: People
 
     private var peoplePanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("People")
-                .font(.subheadline)
+                .font(.headline)
                 .foregroundStyle(.secondary)
 
-            VStack(spacing: 0) {
-                ForEach(model.speakerOrder.indices, id: \.self) { index in
-                    personRow(model.speakerOrder[index])
-                    if index < model.speakerOrder.count - 1 {
-                        Divider()
+            // A pathological diarisation result can contain many identities.
+            // Let that list scroll inside the rail instead of using its full
+            // intrinsic height and crushing the header/playback rows above.
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(model.speakerOrder.indices, id: \.self) { index in
+                        personRow(model.speakerOrder[index])
+                        if index < model.speakerOrder.count - 1 {
+                            Divider().padding(.leading, 34)
+                        }
                     }
                 }
             }
+            .frame(maxHeight: .infinity)
 
             Button {
                 model.addSpeaker()
             } label: {
                 Label("Add Speaker", systemImage: "plus")
-                    .font(.caption)
+                    .font(.callout)
             }
             .buttonStyle(.borderless)
             .help("Add a speaker to assign segments to")
@@ -1076,12 +1960,12 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(10)
+        .padding(12)
         // Accepts the height the row offers rather than demanding all of it,
         // which a trailing Spacer() used to do.
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.07)))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.07)))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     /// A badge and a name at rest; a name field, a colour menu and a delete
@@ -1091,14 +1975,30 @@ struct ContentView: View {
     /// while hovered — otherwise nudging the mouse away mid-rename would
     /// swap the field out from under the cursor.
     private func personRow(_ id: String) -> some View {
-        let isEditing = hoveredSpeaker == id || focusedSpeaker == id
+        // Focus owns the editing state. While one field is active, hovering
+        // another row must not open a second editor beside it.
+        let isEditing = focusedSpeaker == id || (focusedSpeaker == nil && hoveredSpeaker == id)
 
-        return HStack(spacing: 6) {
+        let speakerColor = model.color(for: id).color
+
+        return HStack(spacing: 8) {
             if isEditing {
                 TextField(TranscriptFormatter.label(for: id),
                           text: Binding(get: { model.speakerNames[id] ?? "" },
                                         set: { model.speakerNames[id] = $0 }))
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(speakerColor)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(speakerColor.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(speakerColor.opacity(0.55), lineWidth: 1)
+                    )
                     .focused($focusedSpeaker, equals: id)
                     // Without these the row kept its editing form forever:
                     // nothing else on the panel takes focus, so the field
@@ -1112,7 +2012,8 @@ struct ContentView: View {
                     }
                 } label: {
                     Image(systemName: "paintpalette")
-                        .foregroundStyle(model.color(for: id).color)
+                        .font(.system(size: 15))
+                        .foregroundStyle(speakerColor)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -1124,21 +2025,24 @@ struct ContentView: View {
                     model.removeSpeaker(id)
                 } label: {
                     Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.borderless)
                 .help(model.removalHelp(for: id))
             } else {
                 ZStack {
                     Circle()
-                        .fill(model.color(for: id).color)
+                        .fill(speakerColor)
                     Text(model.initial(for: id))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white)
                 }
-                .frame(width: 24, height: 24)
+                .frame(width: 27, height: 27)
 
                 Text(model.displayName(for: id))
-                    .foregroundStyle(model.color(for: id).color)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(speakerColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
@@ -1147,8 +2051,16 @@ struct ContentView: View {
         }
         // A fixed height, so the row does not jump as it swaps between the
         // two forms under the pointer.
-        .frame(height: 30)
+        .frame(height: 36)
         .contentShape(Rectangle())
+        .onTapGesture {
+            // Clicking another person counts as clicking outside the active
+            // field: close it, then let this hovered row become editable.
+            if let focusedSpeaker, focusedSpeaker != id {
+                self.focusedSpeaker = nil
+                hoveredSpeaker = id
+            }
+        }
         .onHover { hovering in
             if hovering {
                 hoveredSpeaker = id

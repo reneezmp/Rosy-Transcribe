@@ -26,6 +26,15 @@ struct TranscriptionResponse: Decodable {
         case audioDurationSecs = "audio_duration_secs"
         case words
     }
+
+    init(text: String, languageCode: String?, languageProbability: Double?,
+         audioDurationSecs: Double?, words: [TranscriptionWord]?) {
+        self.text = text
+        self.languageCode = languageCode
+        self.languageProbability = languageProbability
+        self.audioDurationSecs = audioDurationSecs
+        self.words = words
+    }
 }
 
 struct TranscriptionWord: Decodable {
@@ -44,5 +53,14 @@ struct TranscriptionWord: Decodable {
         case start
         case end
         case speakerId = "speaker_id"
+    }
+
+
+    init(type: String?, text: String, start: Double?, end: Double?, speakerId: String?) {
+        self.type = type
+        self.text = text
+        self.start = start
+        self.end = end
+        self.speakerId = speakerId
     }
 }

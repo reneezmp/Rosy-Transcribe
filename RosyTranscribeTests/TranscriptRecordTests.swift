@@ -139,6 +139,7 @@ final class TranscriptRecordTests: XCTestCase {
         let record = try decoder.decode(TranscriptRecord.self, from: Data(json.utf8))
 
         XCTAssertEqual(record.title, "Reunião")
+        XCTAssertNil(record.audioPath)
         XCTAssertNil(record.speakerOrder)
         // Derived from the turns instead.
         XCTAssertEqual(record.speakers, ["speaker_0", "speaker_1"])
@@ -164,6 +165,38 @@ final class TranscriptStoreTests: XCTestCase {
 
     private var directory: URL!
     private var store: TranscriptStore!
+
+    func testAudioPathAndTimingsSurviveSavingAndLoading() throws {
+        let timed = SpeakerTurn(speakerID: "speaker_0",
+                                text: "Bom dia.",
+                                timedWords: [TimedWord(text: "Bom", start: 2, end: 2.3)])
+        let original = TranscriptRecord(title: "Com áudio",
+                                        createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+                                        sourceFilename: "reunião.m4a",
+                                        audioPath: "/Users/renee/Meetings/reunião.m4a",
+                                        turns: [timed])
+        try store.save(original)
+        let loaded = try XCTUnwrap(store.load().first)
+
+        XCTAssertEqual(loaded.audioPath, original.audioPath)
+        XCTAssertEqual(loaded.turns.first?.startTime, 2)
+        XCTAssertEqual(loaded.turns.first?.timedWords, timed.timedWords)
+    }
+
+    func testTwoTrackMeetingPathsSurviveSavingAndLoading() throws {
+        let original = TranscriptRecord(title: "Meeting",
+                                        sourceFilename: "system.caf",
+                                        audioPath: "/Recordings/meeting/system.caf",
+                                        secondaryAudioPath: "/Recordings/meeting/microphone.caf",
+                                        recordingMode: .meeting,
+                                        fallbackText: "Recorded")
+        try store.save(original)
+        let loaded = try XCTUnwrap(store.load().first)
+
+        XCTAssertEqual(loaded.audioPath, original.audioPath)
+        XCTAssertEqual(loaded.secondaryAudioPath, original.secondaryAudioPath)
+        XCTAssertEqual(loaded.recordingMode, .meeting)
+    }
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory

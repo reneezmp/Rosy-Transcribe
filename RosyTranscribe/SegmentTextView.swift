@@ -23,6 +23,12 @@ struct SegmentTextView: NSViewRepresentable {
     let highlights: [Range<String.Index>]
     /// The one match the find bar is currently sitting on, if it is in here.
     let currentHighlight: Range<String.Index>?
+    /// UTF-16 offset of an Option-click, used to seek without stealing
+    /// ordinary caret placement, selection, or double-click-to-select.
+    let onOptionClick: (Int) -> Void
+    /// Return creates a new sibling segment at the caret instead of inserting
+    /// a newline into this one.
+    let onSplit: (Int) -> Void
     /// Called when editing finishes, so the segment can be trimmed and an
     /// emptied one removed.
     let onEditingEnded: () -> Void
@@ -40,6 +46,7 @@ struct SegmentTextView: NSViewRepresentable {
         view.textContainer?.widthTracksTextView = true
         view.isHorizontallyResizable = false
         view.isVerticallyResizable = true
+        view.onOptionClick = onOptionClick
         // Let the row's height follow the text rather than the other way round.
         view.setContentHuggingPriority(.defaultHigh, for: .vertical)
         view.setContentCompressionResistancePriority(.defaultHigh, for: .vertical)
@@ -48,6 +55,7 @@ struct SegmentTextView: NSViewRepresentable {
 
     func updateNSView(_ view: MeasuringTextView, context: Context) {
         context.coordinator.parent = self
+        view.onOptionClick = onOptionClick
 
         // Only replace the string when it really differs. Writing it back on
         // every update would reset the caret to the start mid-sentence.
@@ -113,6 +121,17 @@ struct SegmentTextView: NSViewRepresentable {
             let ended = parent.onEditingEnded
             DispatchQueue.main.async { ended() }
         }
+
+        func textView(_ textView: NSTextView,
+                      doCommandBy commandSelector: Selector) -> Bool {
+            guard commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
+            let offset = textView.selectedRange().location
+            let split = parent.onSplit
+            // Mutating the row collection inside AppKit's key event can tear
+            // down the active text view mid-dispatch, so defer one run-loop.
+            DispatchQueue.main.async { split(offset) }
+            return true
+        }
     }
 }
 
@@ -120,6 +139,24 @@ struct SegmentTextView: NSViewRepresentable {
 /// in the transcript can size itself. Without this the view has no intrinsic
 /// height in SwiftUI and collapses.
 final class MeasuringTextView: NSTextView {
+
+    var onOptionClick: ((Int) -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.modifierFlags.contains(.option),
+              let layoutManager,
+              let textContainer else {
+            super.mouseDown(with: event)
+            return
+        }
+        var point = convert(event.locationInWindow, from: nil)
+        point.x -= textContainerOrigin.x
+        point.y -= textContainerOrigin.y
+        let index = layoutManager.characterIndex(for: point,
+                                                 in: textContainer,
+                                                 fractionOfDistanceBetweenInsertionPoints: nil)
+        onOptionClick?(min(index, string.utf16.count))
+    }
 
     override var intrinsicContentSize: NSSize {
         guard let container = textContainer, let manager = layoutManager else {

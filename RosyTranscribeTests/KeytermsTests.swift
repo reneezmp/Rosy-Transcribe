@@ -137,4 +137,10 @@ final class KeytermsTests: XCTestCase {
         XCTAssertTrue(fields.contains(MultipartField("timestamps_granularity", "word")))
         XCTAssertTrue(fields.contains(MultipartField("language_code", "por")))
     }
+
+    func testKnownSingleSpeakerCanDisableDiarisation() {
+        let fields = TranscriptionService.formFields(languageCode: "por", keyterms: [], diarize: false)
+        XCTAssertTrue(fields.contains(MultipartField("diarize", "false")))
+        XCTAssertFalse(fields.contains(MultipartField("diarize", "true")))
+    }
 }

@@ -114,7 +114,12 @@ done
 [ "$FAILED" -eq 0 ] || die "The binary is stamped with a minimum OS above $REQUIRED_TARGET."
 
 echo "Signature:"
-codesign -dv "$APP" 2>&1 | sed 's/^/  /' || true
+SIGNATURE_INFO="$(codesign -dvvv "$APP" 2>&1)"
+printf '%s\n' "$SIGNATURE_INFO" | sed 's/^/  /'
+printf '%s\n' "$SIGNATURE_INFO" | grep -q 'Signature=adhoc' \
+    && die "The app fell back to ad-hoc signing. macOS will forget its recording permissions after the next rebuild."
+printf '%s\n' "$SIGNATURE_INFO" | grep -q 'Authority=Rosy Transcribe Local Signing' \
+    || die "The app was not signed by the stable Rosy Transcribe Local Signing identity."
 
 say "Done"
 echo "App: $APP"
