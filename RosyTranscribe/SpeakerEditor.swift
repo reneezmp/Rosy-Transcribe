@@ -2,10 +2,10 @@ import Foundation
 
 /// Edits to who said what, as pure functions over an array of turns.
 ///
-/// Reassignment never merges or deletes a turn. Two adjacent turns by the same
-/// speaker are joined only when the transcript is rendered, so every edit stays
-/// reversible: physically merging a reassigned segment into its neighbours
-/// would destroy the boundary and make putting it back impossible.
+/// Reassignment resolves boundaries as well as labels. Once neighbouring turns
+/// belong to the same speaker they become one segment, matching what the editor
+/// displays and avoiding a stack of identical speaker rows after bulk cleanup.
+/// A deliberate Return split is retained until a reassignment touches it.
 enum SpeakerEditor {
 
     /// Moves one segment to another speaker.
@@ -15,7 +15,7 @@ enum SpeakerEditor {
         guard turns.indices.contains(index) else { return turns }
         var edited = turns
         edited[index].speakerID = speakerID
-        return edited
+        return TranscriptFormatter.merged(edited)
     }
 
     /// Moves every segment belonging to one speaker to another — the fix for
@@ -23,10 +23,11 @@ enum SpeakerEditor {
     static func reassigningAll(_ turns: [SpeakerTurn],
                                from source: String?,
                                to destination: String) -> [SpeakerTurn] {
-        turns.map { turn in
+        let reassigned = turns.map { turn in
             guard turn.speakerID == source else { return turn }
             return SpeakerTurn(speakerID: destination, text: turn.text, timedWords: turn.timedWords)
         }
+        return TranscriptFormatter.merged(reassigned)
     }
 
     /// The lowest `speaker_N` not already taken.

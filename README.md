@@ -79,8 +79,10 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
    popover automatically.
 4. Pick a language, or leave it on Auto-detect. In local mode, Auto uses the
    Mac's current language because Apple Speech does not auto-detect languages.
-   If you know how many people are in the recording, choose that number under
-   **Expected speakers**; otherwise leave it on Auto.
+   For an imported or system-audio file, choose **Expected speakers** when the
+   headcount is known. A two-track meeting instead asks for **Remote speakers**:
+   choose 1 for a class with one student, or the number of people heard through
+   the Mac for a group call.
 5. Optionally add key terms — see below. They currently apply to ElevenLabs.
 6. Transcribe. Long recordings can take several minutes.
 7. Copy All.
@@ -158,6 +160,16 @@ bound: when the diarizer creates too many aliases, Rosy compares their
 duration-weighted voice embeddings and repeatedly merges the closest pair.
 It cannot manufacture a speaker the diarizer missed, but it prevents a known
 four-person meeting from becoming fifteen apparent identities.
+
+Two-track meetings have stronger evidence than voice clustering: Rosy already
+knows which file came from the microphone and which came from the Mac. With
+**Remote speakers** set to 1, it skips diarisation for both tracks, labels the
+microphone as `You`, and assigns the complete system track to `Speaker 1`.
+With two or more remote people, only the system track is diarised and the
+selected count becomes its local clustering target. This prevents one student
+from being split into several imaginary identities while preserving group-call
+support.
+
 Words are assigned only when a speaker interval overlaps them, or when a tiny
 and unambiguous boundary gap is close enough to bridge. Larger or equidistant
 gaps remain `Unknown` instead of being attributed to an arbitrary person.
@@ -315,18 +327,15 @@ and shown as **Unknown**, and can be handed to anyone with the same
 right-click menu. Because of that the panel stays visible even with no
 speakers left, or Add Speaker would be unreachable.
 
-Reassignment never merges or deletes a segment. That is what makes it
-reversible: physically merging a moved segment into its neighbours would
-destroy the boundary and leave no way to put it back.
+Reassignment joins neighbouring segments once they belong to the same speaker.
+This keeps bulk cleanup from leaving a ladder of identical speaker rows. A
+Return-created split remains separate until a reassignment resolves that
+boundary.
 
-So the window and the exported file show the same transcript differently, on
-purpose. **The window is an editor of segments**: every segment gets its own
-row with the speaker's name repeated, even where the row above has the same
-speaker, because each row is separately right-clickable and a blank name would
-both hide that and misrepresent two segments as one. **The exported file is
-for reading**: `TranscriptFormatter.merged` joins adjacent segments by the
-same speaker there, so Markdown and Copy All give one block of speech under
-one name.
+**The window is an editor of segments**: every boundary that remains gets its
+own row and right-click target. Reassignment resolves newly redundant
+boundaries immediately. Markdown and Copy All perform the same final adjacent
+speaker cleanup before producing the readable transcript.
 
 ## The library
 

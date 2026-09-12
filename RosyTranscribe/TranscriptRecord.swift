@@ -18,6 +18,9 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
     /// every transcript created before recording support fully compatible.
     var secondaryAudioPath: String?
     var recordingMode: RecordingMode?
+    /// Number of people expected on the system-audio side of a two-track
+    /// meeting. Optional keeps records from before this control readable.
+    var remoteSpeakers: Int?
     var detectedLanguage: String?
     var turns: [SpeakerTurn]
     var fallbackText: String
@@ -29,6 +32,11 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
     /// optional properties, and `TranscriptRecord.speakers` falls back to
     /// deriving the list from the turns.
     var speakerOrder: [String]?
+    /// Optional stable links into the People directory. Names and colours
+    /// remain snapshots so historical transcripts never change implicitly.
+    var speakerPersonIDs: [String: UUID]?
+    /// Original assembled turns retained when ignored rules hide segments.
+    var unfilteredTurns: [SpeakerTurn]?
 
     init(id: UUID = UUID(),
          title: String = "",
@@ -37,12 +45,15 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
          audioPath: String? = nil,
          secondaryAudioPath: String? = nil,
          recordingMode: RecordingMode? = nil,
+         remoteSpeakers: Int? = nil,
          detectedLanguage: String? = nil,
          turns: [SpeakerTurn] = [],
          fallbackText: String = "",
          speakerNames: [String: String] = [:],
          speakerColors: [String: SpeakerColor] = [:],
-         speakerOrder: [String]? = nil) {
+         speakerOrder: [String]? = nil,
+         speakerPersonIDs: [String: UUID]? = nil,
+         unfilteredTurns: [SpeakerTurn]? = nil) {
         self.id = id
         self.title = title
         self.createdAt = createdAt
@@ -50,12 +61,15 @@ struct TranscriptRecord: Codable, Identifiable, Equatable {
         self.audioPath = audioPath
         self.secondaryAudioPath = secondaryAudioPath
         self.recordingMode = recordingMode
+        self.remoteSpeakers = remoteSpeakers
         self.detectedLanguage = detectedLanguage
         self.turns = turns
         self.fallbackText = fallbackText
         self.speakerNames = speakerNames
         self.speakerColors = speakerColors
         self.speakerOrder = speakerOrder
+        self.speakerPersonIDs = speakerPersonIDs
+        self.unfilteredTurns = unfilteredTurns
     }
 
     /// The speaker list, derived from the turns when the record predates

@@ -16,6 +16,7 @@ final class TranscriberModel: ObservableObject {
         static let keyterms = "keyterms"
         static let engine = "transcriptionEngine"
         static let expectedSpeakers = "expectedSpeakers"
+        static let remoteSpeakers = "remoteSpeakers"
     }
 
     // MARK: Settings
@@ -39,6 +40,16 @@ final class TranscriberModel: ObservableObject {
     /// sensitivity; it is irrelevant to ElevenLabs and hidden there.
     @Published var expectedSpeakers: Int {
         didSet { defaults.set(expectedSpeakers, forKey: DefaultsKey.expectedSpeakers) }
+    }
+
+    /// People arriving through the Mac's audio track in a meeting. When this
+    /// is one, the track itself is stronger evidence than acoustic clustering:
+    /// Rosy can skip diarisation and never invent extra students.
+    @Published var remoteSpeakers: Int {
+        didSet {
+            defaults.set(remoteSpeakers, forKey: DefaultsKey.remoteSpeakers)
+            scheduleSave()
+        }
     }
 
     /// Free text: commas or newlines between terms. Not a secret, so plain
@@ -72,6 +83,7 @@ final class TranscriberModel: ObservableObject {
             refreshMatches()
         }
     }
+    @Published var unfilteredTurns: [SpeakerTurn]?
     /// The flat transcript, shown when diarization produced nothing to group.
     @Published var fallbackText: String = ""
     @Published var detectedLanguage: String?
@@ -86,6 +98,9 @@ final class TranscriberModel: ObservableObject {
     /// assigns speaker ids by order of first appearance, so `speaker_0` is a
     /// different person in every recording.
     @Published var speakerNames: [String: String] = [:] {
+        didSet { scheduleSave() }
+    }
+    @Published var speakerPersonIDs: [String: UUID] = [:] {
         didSet { scheduleSave() }
     }
     @Published var speakerColors: [String: SpeakerColor] = [:] {
@@ -136,6 +151,8 @@ final class TranscriberModel: ObservableObject {
             ? .elevenLabs : storedEngine
         let storedSpeakerCount = defaults.integer(forKey: DefaultsKey.expectedSpeakers)
         self.expectedSpeakers = (2...8).contains(storedSpeakerCount) ? storedSpeakerCount : 0
+        let storedRemoteCount = defaults.integer(forKey: DefaultsKey.remoteSpeakers)
+        self.remoteSpeakers = (1...8).contains(storedRemoteCount) ? storedRemoteCount : 1
         self.keytermsText = defaults.string(forKey: DefaultsKey.keyterms) ?? ""
         self.audioPath = nil
         self.secondaryAudioPath = nil
@@ -150,6 +167,9 @@ final class TranscriberModel: ObservableObject {
         KeychainStore.migrateLegacyKeyIfNeeded(defaults: defaults)
         do {
             self.apiKey = try KeychainStore.read() ?? ""
+            if !self.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                CloudTranscriptionRegistry.shared.registerElevenLabsIfMissing(enabled: true)
+            }
         } catch {
             self.apiKey = ""
             self.keychainWarning = error.localizedDescription
@@ -167,11 +187,15 @@ final class TranscriberModel: ObservableObject {
     var hasAPIKey: Bool {
         !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+    var elevenLabsUsable: Bool {
+        hasAPIKey && CloudTranscriptionRegistry.shared.providers.contains { $0.id == CloudTranscriptionProvider.elevenLabs.id && $0.enabled }
+    }
+    var hasUsableTranscriptionSource: Bool { LocalTranscriptionAvailability.isAvailable || elevenLabsUsable }
 
     var canTranscribe: Bool {
-        guard selectedFile != nil, !isTranscribing else { return false }
+        guard transcribableAudioURL != nil, !isTranscribing else { return false }
         switch engine {
-        case .elevenLabs: return hasAPIKey && keytermsProblem == nil
+        case .elevenLabs: return elevenLabsUsable && keytermsProblem == nil
         case .onDevice: return LocalTranscriptionAvailability.isAvailable
         }
     }
@@ -183,6 +207,24 @@ final class TranscriberModel: ObservableObject {
     var linkedAudioURL: URL? {
         guard let audioPath, !audioPath.isEmpty else { return nil }
         return URL(fileURLWithPath: audioPath)
+    }
+
+    /// The file selected during this session, or the persisted recording path
+    /// when a saved transcript is reopened. Keeping this derived avoids making
+    /// a transcript permanently non-transcribable merely because the app was
+    /// quit after its first pass.
+    var transcribableAudioURL: URL? {
+        if let selectedFile,
+           FileManager.default.fileExists(atPath: selectedFile.path) {
+            return selectedFile
+        }
+        guard let linkedAudioURL,
+              FileManager.default.fileExists(atPath: linkedAudioURL.path) else { return nil }
+        if recordingMode == .meeting {
+            guard let secondaryAudioPath,
+                  FileManager.default.fileExists(atPath: secondaryAudioPath) else { return nil }
+        }
+        return linkedAudioURL
     }
 
     var linkedAudioURLs: [URL] {
@@ -305,7 +347,13 @@ final class TranscriberModel: ObservableObject {
     // MARK: Transcribing
 
     func transcribe() async {
-        guard let fileURL = selectedFile else { return }
+        guard let fileURL = transcribableAudioURL else {
+            errorMessage = "Rosy cannot retranscribe because one or more linked audio files are missing. Relink the recording and try again."
+            return
+        }
+        // Reopened transcripts restore their persisted path here, so the
+        // existing transcription pipeline can run unchanged.
+        selectedFile = fileURL
 
         isTranscribing = true
         errorMessage = nil
@@ -317,6 +365,8 @@ final class TranscriberModel: ObservableObject {
             var microphoneResponse: TranscriptionResponse?
             let microphoneURL = secondaryAudioPath.map(URL.init(fileURLWithPath:))
             let isMicrophoneOnly = recordingMode == .microphone
+            let isMeeting = recordingMode == .meeting && microphoneURL != nil
+            let hasSingleRemoteSpeaker = isMeeting && remoteSpeakers == 1
             switch engine {
             case .elevenLabs:
                 let terms = try Keyterms.validated(keytermsText)
@@ -324,7 +374,7 @@ final class TranscriberModel: ObservableObject {
                                                    apiKey: apiKey,
                                                    languageCode: language.languageCode,
                                                    keyterms: terms,
-                                                   diarize: !isMicrophoneOnly)
+                                                   diarize: !isMicrophoneOnly && !hasSingleRemoteSpeaker)
                 if let microphoneURL {
                     async let primary = service.transcribe(request)
                     async let microphone = service.transcribe(
@@ -342,7 +392,10 @@ final class TranscriberModel: ObservableObject {
                 response = try await localService.transcribe(
                     fileURL: fileURL,
                     language: language,
-                    expectedSpeakers: expectedSpeakers == 0 ? nil : expectedSpeakers
+                    expectedSpeakers: isMeeting
+                        ? (hasSingleRemoteSpeaker ? nil : remoteSpeakers)
+                        : (expectedSpeakers == 0 ? nil : expectedSpeakers),
+                    diarize: !isMicrophoneOnly && !hasSingleRemoteSpeaker
                 )
                 // Run sequentially locally: two simultaneous SpeechAnalyzer +
                 // diariser pipelines needlessly double peak memory.
@@ -350,30 +403,46 @@ final class TranscriberModel: ObservableObject {
                     microphoneResponse = try await localService.transcribe(
                         fileURL: microphoneURL,
                         language: language,
-                        expectedSpeakers: nil
+                        expectedSpeakers: nil,
+                        diarize: false
                     )
                 }
             }
 
             isLoadingRecord = true
-            var words = response.words ?? []
-            if isMicrophoneOnly {
-                words = Self.forcingSpeaker("speaker_local", in: words)
-            }
             if let microphoneResponse {
-                words += Self.forcingSpeaker("speaker_local", in: microphoneResponse.words ?? [])
-                words.sort { ($0.start ?? .greatestFiniteMagnitude) < ($1.start ?? .greatestFiniteMagnitude) }
-            }
-            turns = TranscriptFormatter.turns(from: words)
-            if let microphoneResponse, words.isEmpty {
-                fallbackText = "Others:\n\(response.text)\n\nYou:\n\(microphoneResponse.text)"
+                turns = TranscriptFormatter.meetingTurns(
+                    systemWords: response.words ?? [],
+                    microphoneWords: microphoneResponse.words ?? [],
+                    systemSpeakerID: hasSingleRemoteSpeaker ? "speaker_0" : nil
+                )
+                fallbackText = turns.isEmpty
+                    ? "Others:\n\(response.text)\n\nYou:\n\(microphoneResponse.text)"
+                    : ""
             } else {
+                var words = response.words ?? []
+                if isMicrophoneOnly {
+                    words = Self.forcingSpeaker("speaker_local", in: words)
+                }
+                turns = TranscriptFormatter.turns(from: words)
                 fallbackText = response.text
             }
+            // Hide only complete ignored segments, before the final merge and
+            // save. Existing transcript JSON remains untouched on load.
+            let ignoredRules = SettingsStore<IgnoredSegmentRule>(filename: "IgnoredSegments.json").load()
+            unfilteredTurns = turns
+            turns = IgnoredSegmentFiltering.applying(ignoredRules, to: turns)
+            if !turns.isEmpty { fallbackText = "" }
             speakerOrder = TranscriptFormatter.speakerIDs(in: turns)
             speakerColors = SpeakerColor.assign(to: speakerOrder)
             if speakerOrder.contains("speaker_local") {
-                speakerNames["speaker_local"] = "You"
+                if let you = SettingsStore<PersonProfile>(filename: "People.json").load().first(where: { $0.isYou }) {
+                    speakerNames["speaker_local"] = you.displayName
+                    speakerColors["speaker_local"] = you.color
+                    speakerPersonIDs["speaker_local"] = you.id
+                } else {
+                    speakerNames["speaker_local"] = "You"
+                }
             }
             detectedLanguage = Self.describeLanguage(response)
             sourceFilename = fileURL.lastPathComponent
@@ -417,10 +486,15 @@ final class TranscriberModel: ObservableObject {
         audioPath = record.audioPath
         secondaryAudioPath = record.secondaryAudioPath
         recordingMode = record.recordingMode
+        if record.recordingMode == .meeting {
+            remoteSpeakers = record.remoteSpeakers ?? 1
+        }
         detectedLanguage = record.detectedLanguage
         turns = record.turns
+        unfilteredTurns = record.unfilteredTurns
         fallbackText = record.fallbackText
         speakerNames = record.speakerNames
+        speakerPersonIDs = record.speakerPersonIDs ?? [:]
         speakerColors = record.speakerColors
         speakerOrder = record.speakers
         selectedFile = nil
@@ -466,14 +540,84 @@ final class TranscriberModel: ObservableObject {
         }
     }
 
-    // MARK: Editing speakers
-
-    func assign(turnAt index: Int, to speakerID: String) {
-        turns = SpeakerEditor.assigning(turns, at: index, to: speakerID)
+    /// Restores the original assembled turns retained before ignored rules
+    /// were applied. The caller can then re-run the current rules if desired.
+    func restoreIgnoredSegments() {
+        guard let original = unfilteredTurns else { return }
+        turns = TranscriptFormatter.merged(original)
+        unfilteredTurns = nil
+        saveCurrentRecord()
     }
 
-    func reassignAll(from source: String?, to destination: String) {
-        turns = SpeakerEditor.reassigningAll(turns, from: source, to: destination)
+    // MARK: Editing speakers
+
+    private struct EditSnapshot: Equatable {
+        let turns: [SpeakerTurn]
+        let fallbackText: String
+        let speakerNames: [String: String]
+        let speakerColors: [String: SpeakerColor]
+        let speakerOrder: [String]
+        let detectedLanguage: String?
+    }
+
+    private func editSnapshot() -> EditSnapshot {
+        EditSnapshot(turns: turns,
+                     fallbackText: fallbackText,
+                     speakerNames: speakerNames,
+                     speakerColors: speakerColors,
+                     speakerOrder: speakerOrder,
+                     detectedLanguage: detectedLanguage)
+    }
+
+    private func restore(_ snapshot: EditSnapshot) {
+        turns = snapshot.turns
+        fallbackText = snapshot.fallbackText
+        speakerNames = snapshot.speakerNames
+        speakerColors = snapshot.speakerColors
+        speakerOrder = snapshot.speakerOrder
+        detectedLanguage = snapshot.detectedLanguage
+    }
+
+    private func performUndoable(_ actionName: String,
+                                 undoManager: UndoManager?,
+                                 edit: () -> Void) {
+        let before = editSnapshot()
+        edit()
+        guard let undoManager, editSnapshot() != before else { return }
+        registerUndo(restoring: before, actionName: actionName, with: undoManager)
+    }
+
+    private func registerUndo(restoring snapshot: EditSnapshot,
+                              actionName: String,
+                              with undoManager: UndoManager) {
+        let inverse = editSnapshot()
+        undoManager.registerUndo(withTarget: self) { target in
+            target.restore(snapshot)
+            target.registerUndo(restoring: inverse,
+                                actionName: actionName,
+                                with: undoManager)
+        }
+        undoManager.setActionName(actionName)
+    }
+
+    func assign(turnAt index: Int, to speakerID: String, undoManager: UndoManager?) {
+        performUndoable("Reassign Speaker", undoManager: undoManager) {
+            turns = SpeakerEditor.assigning(turns, at: index, to: speakerID)
+        }
+    }
+
+    func reassignAll(from source: String?, to destination: String, undoManager: UndoManager?) {
+        performUndoable("Reassign All Segments", undoManager: undoManager) {
+            turns = SpeakerEditor.reassigningAll(turns, from: source, to: destination)
+        }
+    }
+
+    func linkSpeaker(_ speakerID: String, to person: PersonProfile, undoManager: UndoManager?) {
+        performUndoable("Link Speaker", undoManager: undoManager) {
+            speakerNames[speakerID] = person.displayName
+            speakerColors[speakerID] = person.color
+            speakerPersonIDs[speakerID] = person.id
+        }
     }
 
     // MARK: Editing the text
@@ -483,8 +627,10 @@ final class TranscriberModel: ObservableObject {
                 set: { self.turns = SpeakerEditor.replacingText(self.turns, at: index, with: $0) })
     }
 
-    func splitTurn(at index: Int, utf16Offset: Int) {
-        turns = SpeakerEditor.splitting(turns, at: index, utf16Offset: utf16Offset)
+    func splitTurn(at index: Int, utf16Offset: Int, undoManager: UndoManager?) {
+        performUndoable("Split Segment", undoManager: undoManager) {
+            turns = SpeakerEditor.splitting(turns, at: index, utf16Offset: utf16Offset)
+        }
     }
 
     /// Returns true when the segment was emptied and therefore removed.
@@ -523,19 +669,31 @@ final class TranscriberModel: ObservableObject {
         currentMatch = (clampedMatch + delta + matches.count) % matches.count
     }
 
-    func addSpeaker() {
-        let id = SpeakerEditor.nextSpeakerID(notIn: speakerOrder)
-        speakerColors[id] = SpeakerColor.forSpeaker(atIndex: speakerOrder.count)
-        speakerOrder.append(id)
+    func addSpeaker(undoManager: UndoManager?) {
+        performUndoable("Add Speaker", undoManager: undoManager) {
+            let id = SpeakerEditor.nextSpeakerID(notIn: speakerOrder)
+            speakerColors[id] = SpeakerColor.forSpeaker(atIndex: speakerOrder.count)
+            speakerOrder.append(id)
+        }
     }
 
     /// Any speaker can be deleted. Their segments are detached rather than
     /// destroyed, and show as "Unknown" until reassigned.
-    func removeSpeaker(_ speakerID: String) {
-        turns = SpeakerEditor.unassigning(turns, speakerID: speakerID)
-        speakerOrder.removeAll { $0 == speakerID }
-        speakerNames[speakerID] = nil
-        speakerColors[speakerID] = nil
+    func removeSpeaker(_ speakerID: String, undoManager: UndoManager?) {
+        performUndoable("Remove Speaker", undoManager: undoManager) {
+            turns = SpeakerEditor.unassigning(turns, speakerID: speakerID)
+            speakerOrder.removeAll { $0 == speakerID }
+            speakerNames[speakerID] = nil
+            speakerColors[speakerID] = nil
+        }
+    }
+
+    func setSpeakerColor(_ color: SpeakerColor,
+                         for speakerID: String,
+                         undoManager: UndoManager?) {
+        performUndoable("Change Speaker Colour", undoManager: undoManager) {
+            speakerColors[speakerID] = color
+        }
     }
 
     // MARK: Audio playback
@@ -642,12 +800,15 @@ final class TranscriberModel: ObservableObject {
                          audioPath: audioPath,
                          secondaryAudioPath: secondaryAudioPath,
                          recordingMode: recordingMode,
+                         remoteSpeakers: recordingMode == .meeting ? remoteSpeakers : nil,
                          detectedLanguage: detectedLanguage,
                          turns: turns,
                          fallbackText: fallbackText,
                          speakerNames: speakerNames,
                          speakerColors: speakerColors,
-                         speakerOrder: speakerOrder)
+                         speakerOrder: speakerOrder,
+                         speakerPersonIDs: speakerPersonIDs,
+                         unfilteredTurns: unfilteredTurns)
     }
 
     private func upsert(_ record: TranscriptRecord) {
@@ -687,6 +848,7 @@ final class TranscriberModel: ObservableObject {
         turns = []
         fallbackText = ""
         speakerNames = [:]
+        speakerPersonIDs = [:]
         speakerColors = [:]
         speakerOrder = []
         detectedLanguage = nil
@@ -761,6 +923,7 @@ extension SpeakerColor {
 
 private enum WorkspacePage: Equatable {
     case home
+    case settings
     case transcription
     case recording
 }
@@ -774,16 +937,17 @@ private enum HomeAction: Hashable {
 
 struct ContentView: View {
 
+    @Environment(\.undoManager) private var undoManager
     @StateObject private var model = TranscriberModel()
+    @StateObject private var cloudRegistry = CloudTranscriptionRegistry.shared
     @StateObject private var recorder = AudioRecordingService()
     @State private var page: WorkspacePage = .home
     @State private var recordingMode: RecordingMode = .microphone
     @State private var recordingTitle = ""
     @State private var showLeaveRecordingWarning = false
+    @State private var showRetranscriptionWarning = false
     @State private var hoveredHomeAction: HomeAction?
     @State private var isDropTargeted = false
-    @State private var isKeyVisible = false
-    @State private var isKeyPopoverPresented = false
     @State private var hoveredSpeaker: String?
     @FocusState private var focusedSpeaker: String?
     @State private var isSearching = false
@@ -816,8 +980,13 @@ struct ContentView: View {
     }
 
     private func requestTranscription() {
-        guard model.engine != .elevenLabs || model.hasAPIKey else {
-            isKeyPopoverPresented = true
+        guard model.hasUsableTranscriptionSource else {
+            page = .settings
+            return
+        }
+        guard model.engine != .elevenLabs || model.elevenLabsUsable else { page = .settings; return }
+        if model.hasTranscript {
+            showRetranscriptionWarning = true
             return
         }
         Task { await model.transcribe() }
@@ -856,6 +1025,7 @@ struct ContentView: View {
             Group {
                 switch page {
                 case .home: homePage
+                case .settings: SettingsView(elevenLabsAPIKey: $model.apiKey)
                 case .transcription: transcriptionPage
                 case .recording: recordingPage
                 }
@@ -872,6 +1042,24 @@ struct ContentView: View {
                 }
             } message: {
                 Text("Going Home would interrupt the recording. The captured audio will be discarded.")
+            }
+            .alert("Retranscribe the Whole Conversation?",
+                   isPresented: $showRetranscriptionWarning) {
+                Button("Cancel", role: .cancel) {}
+                Button("Retranscribe", role: .destructive) {
+                    Task { await model.transcribe() }
+                }
+            } message: {
+                Text("Rosy will process the complete recording again and replace the current transcript, including text corrections, speaker names, colours, and segment edits. The audio files will not be changed.")
+            }
+            .onChange(of: model.currentRecordID) { _ in
+                undoManager?.removeAllActions()
+            }
+            .onReceive(cloudRegistry.$providers) { providers in
+                let cloudAvailable = providers.contains { $0.id == CloudTranscriptionProvider.elevenLabs.id && $0.enabled && model.hasAPIKey }
+                if model.engine == .elevenLabs && !cloudAvailable {
+                    model.engine = LocalTranscriptionAvailability.isAvailable ? .onDevice : .elevenLabs
+                }
             }
         }
     }
@@ -893,6 +1081,17 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 8)
             .padding(.top, 8)
+
+            Button { page = .settings } label: {
+                Label("Settings", systemImage: "gearshape.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(page == .settings ? Color.accentColor.opacity(0.16) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
 
             HStack {
                 Text("Transcriptions")
@@ -963,6 +1162,10 @@ struct ContentView: View {
             .fixedSize(horizontal: false, vertical: true)
             banners
                 .fixedSize(horizontal: false, vertical: true)
+            if let original = model.unfilteredTurns, original.count > model.turns.count {
+                HStack { Text("\(original.count - model.turns.count) ignored segments hidden").foregroundStyle(.secondary); Button("Restore") { model.restoreIgnoredSegments() } }
+                    .font(.caption)
+            }
             if isSearching {
                 searchBar
                     .fixedSize(horizontal: false, vertical: true)
@@ -1007,14 +1210,11 @@ struct ContentView: View {
         if page == .transcription {
             ToolbarItem {
                 Button {
-                    isKeyPopoverPresented.toggle()
+                    page = .settings
                 } label: {
                     Image(systemName: model.hasAPIKey ? "key.fill" : "key")
                 }
                 .help(model.hasAPIKey ? "ElevenLabs API key" : "Add ElevenLabs API key")
-                .popover(isPresented: $isKeyPopoverPresented, arrowEdge: .bottom) {
-                    apiKeyPopover
-                }
             }
             ToolbarItem {
                 Button {
@@ -1060,19 +1260,19 @@ struct ContentView: View {
                                 GridItem(.flexible(), spacing: 14)], spacing: 14) {
                 homeAction(mode: .microphone,
                            action: .microphone,
-                           tint: Color(red: 0.88, green: 0.46, blue: 0.53))
+                           tint: Color(red: 0.96, green: 0.39, blue: 0.52))
                 homeAction(mode: .systemAudio,
                            action: .systemAudio,
-                           tint: Color(red: 0.78, green: 0.38, blue: 0.48))
+                           tint: Color(red: 0.70, green: 0.35, blue: 0.88))
                 homeAction(mode: .meeting,
                            action: .meeting,
-                           tint: Color(red: 0.82, green: 0.57, blue: 0.39))
+                           tint: Color(red: 0.95, green: 0.55, blue: 0.25))
 
                 Button(action: beginFileTranscription) {
                     homeCard(symbol: "waveform.badge.plus",
                              title: "Transcribe a File",
                              detail: "Choose an existing audio or video file.",
-                             tint: Color(red: 0.91, green: 0.54, blue: 0.57),
+                             tint: Color(red: 0.86, green: 0.68, blue: 0.28),
                              isHovered: hoveredHomeAction == .file)
                 }
                 .buttonStyle(.plain)
@@ -1132,8 +1332,12 @@ struct ContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 112, alignment: .center)
+        // Every card uses the same leading inset. Centering each HStack by
+        // its intrinsic width made shorter labels pull their icon inward.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 32)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 15)
                 .fill(isHovered ? tint.opacity(0.16) : Color.gray.opacity(0.09))
@@ -1432,49 +1636,6 @@ struct ContentView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var apiKeyPopover: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: "key.fill")
-                    .foregroundStyle(Color.accentColor)
-                Text("ElevenLabs API Key")
-                    .font(.headline)
-                Spacer()
-                if model.hasAPIKey {
-                    Label("Saved", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
-            }
-
-            HStack(spacing: 7) {
-                Group {
-                    if isKeyVisible {
-                        TextField("xi-api-key", text: $model.apiKey)
-                    } else {
-                        SecureField("xi-api-key", text: $model.apiKey)
-                    }
-                }
-                .textFieldStyle(.roundedBorder)
-                .font(.system(.body, design: .monospaced))
-
-                Button {
-                    isKeyVisible.toggle()
-                } label: {
-                    Image(systemName: isKeyVisible ? "eye.slash" : "eye")
-                }
-                .buttonStyle(.borderless)
-                .help(isKeyVisible ? "Hide the key" : "Show the key")
-            }
-
-            Text("Stored securely in your login Keychain.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(14)
-        .frame(width: 360)
-    }
-
     // MARK: Drop zone
 
     private var dropZone: some View {
@@ -1536,28 +1697,54 @@ struct ContentView: View {
                 Text("Transcription")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Picker("Transcription", selection: $model.engine) {
-                    ForEach(TranscriptionEngine.allCases) { engine in
-                        VStack(alignment: .leading) {
-                            Text(engine.displayName)
-                            Text(engine.detail)
-                        }
-                        .tag(engine)
-                        .disabled(engine == .onDevice && !LocalTranscriptionAvailability.isAvailable)
-                        .help(engine == .onDevice
-                              ? LocalTranscriptionAvailability.explanation
-                              : "Transcribes with ElevenLabs Scribe v2.")
+                if !model.hasUsableTranscriptionSource {
+                    HStack {
+                        Text("No transcription provider configured")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open Settings") { page = .settings }
                     }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    Picker("Transcription", selection: $model.engine) {
+                        ForEach(TranscriptionEngine.allCases.filter { $0 == .onDevice || model.elevenLabsUsable }) { engine in
+                            VStack(alignment: .leading) {
+                                Text(engine.displayName)
+                                Text(engine.detail)
+                            }
+                            .tag(engine)
+                            .disabled(engine == .onDevice && !LocalTranscriptionAvailability.isAvailable)
+                            .help(engine == .onDevice
+                                  ? LocalTranscriptionAvailability.explanation
+                                  : "Transcribes with ElevenLabs Scribe v2.")
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    .help(model.engine == .onDevice
+                          ? LocalTranscriptionAvailability.explanation
+                          : "Choose where the audio is transcribed.")
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity)
-                .help(model.engine == .onDevice
-                      ? LocalTranscriptionAvailability.explanation
-                      : "Choose where the audio is transcribed.")
             }
 
-            if model.engine == .onDevice {
+            if model.recordingMode == .meeting {
+                HStack {
+                    Text("Remote speakers")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("Remote speakers", selection: $model.remoteSpeakers) {
+                        ForEach(1...8, id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 68)
+                    .help("Choose the people on the Mac-audio track. One skips diarisation entirely; larger groups are separated locally when using On This Mac.")
+                }
+            } else if model.engine == .onDevice {
                 HStack {
                     Text("Expected speakers")
                         .font(.caption)
@@ -1585,17 +1772,19 @@ struct ContentView: View {
                     } else {
                         Image(systemName: "waveform")
                     }
-                    Text(model.isTranscribing ? "Transcribing…" : "Transcribe")
+                    Text(model.isTranscribing
+                         ? "Transcribing…"
+                         : (model.hasTranscript ? "Retranscribe" : "Transcribe"))
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.return, modifiers: .command)
-            // Keep the button clickable when only the key is missing: that
-            // click is what opens the key popover and explains what is needed.
-            .disabled(model.selectedFile == nil || model.isTranscribing
-                      || (model.engine == .elevenLabs && model.keytermsProblem != nil))
+            // A missing source routes the user to Settings through the action above.
+            .disabled(model.transcribableAudioURL == nil || model.isTranscribing
+                      || !model.hasUsableTranscriptionSource
+                      || (model.engine == .elevenLabs && (model.keytermsProblem != nil || !model.elevenLabsUsable)))
 
             Button {
                 model.copyTranscript()
@@ -1832,12 +2021,9 @@ struct ContentView: View {
         if model.turns.indices.contains(index) {
             let turn = model.turns[index]
 
-            // The name is repeated on every segment, including where the
-            // segment above has the same speaker. This view is an editor of
-            // segments, and a blank name made two segments look like one
-            // merged block while hiding that the space is right-clickable.
-            // Joining adjacent segments is an output concern and stays in
-            // `TranscriptFormatter.merged`.
+            // Any boundary that remains is a real editing target, so it keeps
+            // its own name and context menu. Speaker reassignment coalesces
+            // redundant neighbours before this view is rebuilt.
             HStack(alignment: .top, spacing: 7) {
                 Text(model.displayName(for: turn.speakerID))
                     .font(.system(.body, design: .monospaced).weight(.semibold))
@@ -1876,7 +2062,9 @@ struct ContentView: View {
                                     model.play(turnAt: index, characterOffset: offset)
                                 },
                                 onSplit: { offset in
-                                    model.splitTurn(at: index, utf16Offset: offset)
+                                    model.splitTurn(at: index,
+                                                    utf16Offset: offset,
+                                                    undoManager: undoManager)
                                 },
                                 onEditingEnded: { model.commitEdit(at: index) })
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1901,7 +2089,7 @@ struct ContentView: View {
 
         ForEach(model.speakerOrder, id: \.self) { id in
             Button {
-                model.assign(turnAt: index, to: id)
+                model.assign(turnAt: index, to: id, undoManager: undoManager)
             } label: {
                 if id == current {
                     Label(model.displayName(for: id), systemImage: "checkmark")
@@ -1913,11 +2101,11 @@ struct ContentView: View {
 
         if !destinations.isEmpty {
             Divider()
-            Menu("Reassign all of \(model.displayName(for: current))'s segments to…") {
-                ForEach(destinations, id: \.self) { id in
-                    Button(model.displayName(for: id)) {
-                        model.reassignAll(from: current, to: id)
-                    }
+            ForEach(destinations, id: \.self) { id in
+                Button("Reassign all of \(model.displayName(for: current))'s segments to \(model.displayName(for: id))") {
+                    model.reassignAll(from: current,
+                                      to: id,
+                                      undoManager: undoManager)
                 }
             }
         }
@@ -1947,7 +2135,7 @@ struct ContentView: View {
             .frame(maxHeight: .infinity)
 
             Button {
-                model.addSpeaker()
+                model.addSpeaker(undoManager: undoManager)
             } label: {
                 Label("Add Speaker", systemImage: "plus")
                     .font(.callout)
@@ -1985,7 +2173,7 @@ struct ContentView: View {
             if isEditing {
                 TextField(TranscriptFormatter.label(for: id),
                           text: Binding(get: { model.speakerNames[id] ?? "" },
-                                        set: { model.speakerNames[id] = $0 }))
+                                        set: { model.speakerNames[id] = $0; model.speakerPersonIDs[id] = nil }))
                     .textFieldStyle(.plain)
                     .font(.body.weight(.medium))
                     .foregroundStyle(speakerColor)
@@ -2006,9 +2194,34 @@ struct ContentView: View {
                     .onSubmit { focusedSpeaker = nil }
                     .onExitCommand { focusedSpeaker = nil }
 
+                Menu("Saved person") {
+                    let query = IgnoredSegmentRule.normalize(model.speakerNames[id] ?? "")
+                    let saved = SettingsStore<PersonProfile>(filename: "People.json").load().filter { person in
+                        query.isEmpty || IgnoredSegmentRule.normalize(person.displayName).contains(query) || person.aliases.contains { IgnoredSegmentRule.normalize($0).contains(query) }
+                    }
+                    if saved.isEmpty { Text("No matching saved people") }
+                    ForEach(saved) { person in
+                        Button(person.displayName) { model.linkSpeaker(id, to: person, undoManager: undoManager) }
+                    }
+                }
+                .menuStyle(.borderlessButton)
+
                 Menu {
+                    let people = SettingsStore<PersonProfile>(filename: "People.json").load()
+                    if !people.isEmpty {
+                        Section("Link to saved person") {
+                            ForEach(people) { person in
+                                Button { model.linkSpeaker(id, to: person, undoManager: undoManager) } label: { Label(person.displayName, systemImage: person.isYou ? "person.fill" : "person") }
+                            }
+                        }
+                        Divider()
+                    }
                     ForEach(SpeakerColor.allCases, id: \.self) { option in
-                        Button(option.displayName) { model.speakerColors[id] = option }
+                        Button(option.displayName) {
+                            model.setSpeakerColor(option,
+                                                  for: id,
+                                                  undoManager: undoManager)
+                        }
                     }
                 } label: {
                     Image(systemName: "paintpalette")
@@ -2022,7 +2235,7 @@ struct ContentView: View {
 
                 Button {
                     if focusedSpeaker == id { focusedSpeaker = nil }
-                    model.removeSpeaker(id)
+                    model.removeSpeaker(id, undoManager: undoManager)
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 14))

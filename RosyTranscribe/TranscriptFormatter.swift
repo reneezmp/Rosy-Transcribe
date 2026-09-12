@@ -62,16 +62,96 @@ enum TranscriptFormatter {
     /// "spacing" and "audio_event" entries, and including them produces a
     /// transcript full of stray whitespace tokens and bracketed noises.
     static func turns(from words: [TranscriptionWord]) -> [SpeakerTurn] {
+        turns(from: words, splittingSameSpeakerAfter: nil)
+    }
+
+    /// Combines the independently transcribed tracks of a meeting without
+    /// interleaving their individual words.
+    ///
+    /// Sorting every word globally makes ordinary overlap alternate speakers
+    /// several times inside one sentence. Each track is therefore shaped into
+    /// utterances first; only those intact blocks are placed on the shared
+    /// timeline. A pause boundary keeps a single-speaker track from becoming
+    /// one enormous turn for the entire recording.
+    static func meetingTurns(systemWords: [TranscriptionWord],
+                             microphoneWords: [TranscriptionWord],
+                             microphoneSpeakerID: String = "speaker_local",
+                             systemSpeakerID: String? = nil) -> [SpeakerTurn] {
+        let preparedSystemWords = systemSpeakerID.map { forcedID in
+            systemWords.map {
+                TranscriptionWord(type: $0.type,
+                                  text: $0.text,
+                                  start: $0.start,
+                                  end: $0.end,
+                                  speakerId: forcedID)
+            }
+        } ?? systemWords
+        let systemTurns = turns(from: preparedSystemWords, splittingSameSpeakerAfter: 0.75)
+        let localWords = microphoneWords.map {
+            TranscriptionWord(type: $0.type,
+                              text: $0.text,
+                              start: $0.start,
+                              end: $0.end,
+                              speakerId: microphoneSpeakerID)
+        }
+        let microphoneTurns = turns(from: localWords, splittingSameSpeakerAfter: 0.75)
+
+        struct PositionedTurn {
+            let turn: SpeakerTurn
+            let track: Int
+            let position: Int
+        }
+
+        let positioned = systemTurns.enumerated().map {
+            PositionedTurn(turn: $0.element, track: 0, position: $0.offset)
+        } + microphoneTurns.enumerated().map {
+            PositionedTurn(turn: $0.element, track: 1, position: $0.offset)
+        }
+
+        let chronological = positioned.sorted { left, right in
+            switch (left.turn.startTime, right.turn.startTime) {
+            case let (leftStart?, rightStart?) where leftStart != rightStart:
+                return leftStart < rightStart
+            case (nil, _?):
+                return false
+            case (_?, nil):
+                return true
+            default:
+                // Deterministic when timestamps are equal or absent: retain
+                // source-track order, then the original order in that track.
+                return left.track == right.track
+                    ? left.position < right.position
+                    : left.track < right.track
+            }
+        }.map(\.turn)
+
+        // Pause detection creates safe utterance boundaries before the two
+        // tracks are interleaved. Once placed on the shared timeline, any
+        // neighbouring blocks still owned by the same speaker are one visible
+        // turn and can be joined without crossing somebody else's speech.
+        return merged(chronological)
+    }
+
+    private static func turns(from words: [TranscriptionWord],
+                              splittingSameSpeakerAfter pauseThreshold: Double?) -> [SpeakerTurn] {
         var turns: [SpeakerTurn] = []
         var speaker: String?
         var tokens: [String] = []
         var timedWords: [TimedWord] = []
+        var previousEnd: Double?
 
         for word in words where isSpokenWord(word) {
             let token = word.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !token.isEmpty else { continue }
 
-            if !tokens.isEmpty && word.speakerId != speaker {
+            let crossedPause: Bool
+            if let pauseThreshold, let previousEnd, let start = word.start {
+                crossedPause = start - previousEnd >= pauseThreshold
+            } else {
+                crossedPause = false
+            }
+
+            if !tokens.isEmpty && (word.speakerId != speaker || crossedPause) {
                 turns.append(SpeakerTurn(speakerID: speaker,
                                          text: tokens.joined(separator: " "),
                                          timedWords: storedTimings(timedWords)))
@@ -83,6 +163,7 @@ enum TranscriptFormatter {
             }
             tokens.append(token)
             timedWords.append(TimedWord(text: token, start: word.start, end: word.end))
+            previousEnd = word.end ?? word.start ?? previousEnd
         }
 
         if !tokens.isEmpty {
@@ -112,10 +193,9 @@ enum TranscriptFormatter {
 
     /// Joins adjacent turns by the same speaker.
     ///
-    /// Only ever applied on the way out. Two adjacent turns by one speaker can
-    /// only arise from a reassignment, and keeping them separate in the data
-    /// is what makes that reassignment reversible — but the reader should see
-    /// one block of speech, not the same name twice in a row.
+    /// Used both for rendered output and when an operation deliberately
+    /// resolves segment boundaries, such as meeting assembly or speaker
+    /// reassignment. Word timings are concatenated so playback remains exact.
     static func merged(_ turns: [SpeakerTurn]) -> [SpeakerTurn] {
         var out: [SpeakerTurn] = []
         for turn in turns {

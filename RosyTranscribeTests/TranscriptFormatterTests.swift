@@ -102,6 +102,94 @@ final class TranscriptFormatterTests: XCTestCase {
         XCTAssertEqual(turn.timestamp(atUTF16Offset: 5), 1.55)
     }
 
+    func testMeetingMergeNeverInterleavesWordsFromOverlappingTracks() {
+        let system = [
+            TranscriptionWord(type: "word", text: "How", start: 1.0, end: 1.2, speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "long", start: 1.25, end: 1.45, speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "are", start: 1.5, end: 1.65, speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "you", start: 1.7, end: 1.9, speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "staying", start: 2.1, end: 2.4, speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "there?", start: 2.45, end: 2.7, speakerId: "speaker_0"),
+        ]
+        let microphone = [
+            TranscriptionWord(type: "word", text: "I'm", start: 1.75, end: 1.95, speakerId: nil),
+            TranscriptionWord(type: "word", text: "anxious.", start: 2.0, end: 2.3, speakerId: nil),
+        ]
+
+        XCTAssertEqual(TranscriptFormatter.meetingTurns(systemWords: system,
+                                                         microphoneWords: microphone), [
+            SpeakerTurn(speakerID: "speaker_0",
+                        text: "How long are you staying there?",
+                        timedWords: system.map { TimedWord(text: $0.text,
+                                                          start: $0.start,
+                                                          end: $0.end) }),
+            SpeakerTurn(speakerID: "speaker_local",
+                        text: "I'm anxious.",
+                        timedWords: microphone.map { TimedWord(text: $0.text,
+                                                              start: $0.start,
+                                                              end: $0.end) }),
+        ])
+    }
+
+    func testMeetingMergeUsesPausesToPlaceTheOtherTrackBetweenUtterances() {
+        let system = [
+            TranscriptionWord(type: "word", text: "First.", start: 0, end: 0.4,
+                              speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "Third.", start: 2, end: 2.4,
+                              speakerId: "speaker_0"),
+        ]
+        let microphone = [
+            TranscriptionWord(type: "word", text: "Second.", start: 1, end: 1.4,
+                              speakerId: nil),
+        ]
+
+        let turns = TranscriptFormatter.meetingTurns(systemWords: system,
+                                                      microphoneWords: microphone)
+
+        XCTAssertEqual(turns.map(\.text), ["First.", "Second.", "Third."])
+        XCTAssertEqual(turns.map(\.speakerID), ["speaker_0", "speaker_local", "speaker_0"])
+    }
+
+    func testMeetingMergeJoinsSameSpeakerUtterancesWhenNothingLandsBetweenThem() {
+        let system = [
+            TranscriptionWord(type: "word", text: "One sentence.", start: 0, end: 0.4,
+                              speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "Another sentence.", start: 2, end: 2.5,
+                              speakerId: "speaker_0"),
+        ]
+
+        let turns = TranscriptFormatter.meetingTurns(systemWords: system,
+                                                      microphoneWords: [])
+
+        XCTAssertEqual(turns.count, 1)
+        XCTAssertEqual(turns.first?.speakerID, "speaker_0")
+        XCTAssertEqual(turns.first?.text, "One sentence. Another sentence.")
+        XCTAssertEqual(turns.first?.timedWords?.count, 2)
+    }
+
+    func testSingleRemoteSpeakerOverridesInventedSystemTrackIdentities() {
+        let system = [
+            TranscriptionWord(type: "word", text: "One", start: 0, end: 0.3,
+                              speakerId: "speaker_0"),
+            TranscriptionWord(type: "word", text: "student", start: 0.4, end: 0.8,
+                              speakerId: "speaker_1"),
+            TranscriptionWord(type: "word", text: "only.", start: 0.9, end: 1.2,
+                              speakerId: "speaker_2"),
+        ]
+
+        let turns = TranscriptFormatter.meetingTurns(systemWords: system,
+                                                      microphoneWords: [],
+                                                      systemSpeakerID: "speaker_0")
+
+        XCTAssertEqual(turns, [
+            SpeakerTurn(speakerID: "speaker_0",
+                        text: "One student only.",
+                        timedWords: system.map {
+                            TimedWord(text: $0.text, start: $0.start, end: $0.end)
+                        })
+        ])
+    }
+
     func testEditedTextFallsBackToTheSegmentStartForSeeking() {
         let turn = SpeakerTurn(speakerID: "speaker_0",
                                text: "Bom dia, doutora.",
@@ -399,8 +487,7 @@ final class SpeakerEditorTests: XCTestCase {
 
     func testAssigningMovesOnlyTheChosenSegment() {
         let edited = SpeakerEditor.assigning(sample, at: 1, to: "speaker_0")
-        XCTAssertEqual(edited.map(\.speakerID), ["speaker_0", "speaker_0", "speaker_0"])
-        XCTAssertEqual(edited.map(\.text), ["um", "dois", "três"])
+        XCTAssertEqual(edited, [turn("um dois três", "speaker_0")])
     }
 
     func testAssigningOutOfRangeChangesNothing() {
@@ -410,19 +497,34 @@ final class SpeakerEditorTests: XCTestCase {
 
     func testReassigningAllMovesEverySegmentOfOneSpeaker() {
         let edited = SpeakerEditor.reassigningAll(sample, from: "speaker_0", to: "speaker_1")
-        XCTAssertEqual(edited.map(\.speakerID), ["speaker_1", "speaker_1", "speaker_1"])
+        XCTAssertEqual(edited, [turn("um dois três", "speaker_1")])
     }
 
     func testReassigningAllLeavesOtherSpeakersAlone() {
         let edited = SpeakerEditor.reassigningAll(sample, from: "speaker_1", to: "speaker_0")
-        XCTAssertEqual(edited.map(\.speakerID), ["speaker_0", "speaker_0", "speaker_0"])
+        XCTAssertEqual(edited, [turn("um dois três", "speaker_0")])
         XCTAssertEqual(SpeakerEditor.reassigningAll(sample, from: "nobody", to: "speaker_0"), sample)
     }
 
     func testReassigningAllCanCollectUndiarizedSegments() {
         let turns = [turn("um", nil), turn("dois", "speaker_0")]
         let edited = SpeakerEditor.reassigningAll(turns, from: nil, to: "speaker_0")
-        XCTAssertEqual(edited.map(\.speakerID), ["speaker_0", "speaker_0"])
+        XCTAssertEqual(edited, [turn("um dois", "speaker_0")])
+    }
+
+    func testReassignmentJoinsWordTimingsInChronologicalOrder() {
+        let turns = [
+            SpeakerTurn(speakerID: "speaker_0", text: "um",
+                        timedWords: [TimedWord(text: "um", start: 1, end: 1.2)]),
+            SpeakerTurn(speakerID: "speaker_1", text: "dois",
+                        timedWords: [TimedWord(text: "dois", start: 1.3, end: 1.6)]),
+        ]
+
+        let edited = SpeakerEditor.assigning(turns, at: 1, to: "speaker_0")
+
+        XCTAssertEqual(edited.count, 1)
+        XCTAssertEqual(edited.first?.text, "um dois")
+        XCTAssertEqual(edited.first?.timedWords?.map(\.start), [1, 1.3])
     }
 
     func testNextSpeakerIDFollowsTheAPINumbering() {
@@ -469,22 +571,14 @@ final class TurnMergingTests: XCTestCase {
         XCTAssertEqual(TranscriptFormatter.merged([]), [])
     }
 
-    /// The point of merging on output only: after reassigning the middle
-    /// segment the reader sees one block, but the three segments are still
-    /// there, so the edit can be undone by reassigning it back.
-    func testReassignmentReadsAsOneBlockButStaysReversible() {
+    func testReassignmentPhysicallyCoalescesTheResolvedRun() {
         let original = [turn("um", "speaker_0"), turn("dois", "speaker_1"), turn("três", "speaker_0")]
         let names = ["speaker_0": "Ana", "speaker_1": "Bruno"]
 
         let edited = SpeakerEditor.assigning(original, at: 1, to: "speaker_0")
-        XCTAssertEqual(edited.count, 3, "segments must survive the reassignment")
+        XCTAssertEqual(edited, [turn("um dois três", "speaker_0")])
         XCTAssertEqual(TranscriptFormatter.format(turns: edited, names: names, fallbackText: ""),
                        "Ana:\num dois três")
-
-        let undone = SpeakerEditor.assigning(edited, at: 1, to: "speaker_1")
-        XCTAssertEqual(undone, original)
-        XCTAssertEqual(TranscriptFormatter.format(turns: undone, names: names, fallbackText: ""),
-                       "Ana:\num\n\nBruno:\ndois\n\nAna:\ntrês")
     }
 
     func testMarkdownAlsoMergesAdjacentSegments() {
@@ -556,7 +650,7 @@ final class DeletingASpeakerTests: XCTestCase {
         let turns = [turn("um", "speaker_0"), turn("dois", "speaker_0")]
         let orphaned = SpeakerEditor.unassigning(turns, speakerID: "speaker_0")
         let recovered = SpeakerEditor.reassigningAll(orphaned, from: nil, to: "speaker_1")
-        XCTAssertEqual(recovered.map(\.speakerID), ["speaker_1", "speaker_1"])
+        XCTAssertEqual(recovered, [turn("um dois", "speaker_1")])
     }
 }
 

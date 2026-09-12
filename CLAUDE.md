@@ -106,9 +106,10 @@ data already on users' disks.
    sent blank. Empty is not the same as absent.
 5. **Filter `words[]` on `type == "word"`.** `spacing` and `audio_event`
    entries otherwise litter the transcript.
-6. **`TranscriptFormatter.merged` is output-only.** Adjacent same-speaker
-   segments stay separate in the data so every reassignment and edit is
-   reversible; they join only in rendered output.
+6. **`TranscriptFormatter.merged` preserves combined timings.** It is used for
+   readable output and after reassignment, where newly adjacent turns owned by
+   the same speaker become one segment. An untouched Return split keeps its
+   boundary until reassignment resolves it.
 7. **`commitEdit` clears `fallbackText` when the last segment is deleted.**
    `format` falls back to the flat API text when there are no turns, so without
    this, emptying the only segment silently resurrects the transcript and saves
@@ -198,12 +199,11 @@ it from a handful of constants at the top of the file.
 
 ### Known limitations, accepted for now
 
-- **No undo for structural edits.** `NSTextView` gives undo *within* one
-  segment, but deleting a segment, deleting a speaker, or reassigning has no
-  undo. Every one of those is non-destructive by design — deleting a speaker
-  detaches their segments rather than removing them, and reassignment keeps
-  segments separate — so the damage is recoverable by hand, but there is no
-  ⌘Z for it.
+- **Undo is document-scoped.** Native text controls provide ordinary typing
+  undo, while segment splitting, speaker reassignment, bulk reassignment,
+  speaker addition/removal and colour changes register structural snapshots
+  with the macOS Undo Manager. Opening another transcript clears that history
+  so ⌘Z can never modify the wrong document.
 - **Selection cannot span two segments,** since each row is its own text view.
   Spanning would mean collapsing the transcript into one continuous view and
   losing the two-column layout. Copy All and the Markdown export cover wanting

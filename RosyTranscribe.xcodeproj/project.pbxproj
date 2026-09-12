@@ -46,6 +46,10 @@
 		1B0000000000000000000025 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 230000000000000000000002 /* FluidAudio */; };
 		1B0000000000000000000026 /* AudioRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000001A /* AudioRecordingService.swift */; };
 		1B0000000000000000000027 /* AudioRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000001A /* AudioRecordingService.swift */; };
+		1B0000000000000000000028 /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000001B /* SettingsModels.swift */; };
+		1B0000000000000000000029 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000001C /* SettingsView.swift */; };
+		1B000000000000000000002A /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000001B /* SettingsModels.swift */; };
+		1B000000000000000000002B /* SettingsModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000001D /* SettingsModelsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -75,6 +79,9 @@
 		1A0000000000000000000018 /* LocalTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriptionService.swift; sourceTree = "<group>"; };
 		1A0000000000000000000019 /* LocalTranscriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriptionTests.swift; sourceTree = "<group>"; };
 		1A000000000000000000001A /* AudioRecordingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecordingService.swift; sourceTree = "<group>"; };
+		1A000000000000000000001B /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
+		1A000000000000000000001C /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1A000000000000000000001D /* SettingsModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModelsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -127,6 +134,8 @@
 				1A0000000000000000000016 /* UpdaterService.swift */,
 				1A0000000000000000000017 /* AudioPlaybackService.swift */,
 				1A000000000000000000001A /* AudioRecordingService.swift */,
+				1A000000000000000000001B /* SettingsModels.swift */,
+				1A000000000000000000001C /* SettingsView.swift */,
 				1A0000000000000000000012 /* Assets.xcassets */,
 			);
 			path = RosyTranscribe;
@@ -141,6 +150,7 @@
 				1A0000000000000000000010 /* TranscriptRecordTests.swift */,
 				1A0000000000000000000014 /* TranscriptSearchTests.swift */,
 				1A0000000000000000000019 /* LocalTranscriptionTests.swift */,
+				1A000000000000000000001D /* SettingsModelsTests.swift */,
 			);
 			path = RosyTranscribeTests;
 			sourceTree = "<group>";
@@ -279,6 +289,8 @@
 				1B000000000000000000001E /* UpdaterService.swift in Sources */,
 				1B0000000000000000000020 /* AudioPlaybackService.swift in Sources */,
 				1B0000000000000000000026 /* AudioRecordingService.swift in Sources */,
+				1B0000000000000000000028 /* SettingsModels.swift in Sources */,
+				1B0000000000000000000029 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -304,6 +316,8 @@
 				1B0000000000000000000023 /* LocalTranscriptionService.swift in Sources */,
 				1B0000000000000000000024 /* LocalTranscriptionTests.swift in Sources */,
 				1B0000000000000000000027 /* AudioRecordingService.swift in Sources */,
+				1B000000000000000000002A /* SettingsModels.swift in Sources */,
+				1B000000000000000000002B /* SettingsModelsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

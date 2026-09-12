@@ -189,6 +189,7 @@ final class TranscriptStoreTests: XCTestCase {
                                         audioPath: "/Recordings/meeting/system.caf",
                                         secondaryAudioPath: "/Recordings/meeting/microphone.caf",
                                         recordingMode: .meeting,
+                                        remoteSpeakers: 1,
                                         fallbackText: "Recorded")
         try store.save(original)
         let loaded = try XCTUnwrap(store.load().first)
@@ -196,6 +197,7 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(loaded.audioPath, original.audioPath)
         XCTAssertEqual(loaded.secondaryAudioPath, original.secondaryAudioPath)
         XCTAssertEqual(loaded.recordingMode, .meeting)
+        XCTAssertEqual(loaded.remoteSpeakers, 1)
     }
 
     override func setUpWithError() throws {

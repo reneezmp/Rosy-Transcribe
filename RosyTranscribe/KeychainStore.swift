@@ -23,7 +23,7 @@ enum KeychainStore {
     /// Key under which v1 stored the API key in UserDefaults.
     static let legacyDefaultsKey = "elevenLabsAPIKey"
 
-    private static func baseQuery(service: String) -> [String: Any] {
+    private static func baseQuery(service: String, account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -31,8 +31,8 @@ enum KeychainStore {
         ]
     }
 
-    static func read(service: String = service) throws -> String? {
-        var query = baseQuery(service: service)
+    static func read(account: String = account, service: String = service) throws -> String? {
+        var query = baseQuery(service: service, account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -50,17 +50,17 @@ enum KeychainStore {
         }
     }
 
-    static func save(_ value: String, service: String = service) throws {
+    static func save(_ value: String, account: String = account, service: String = service) throws {
         let data = Data(value.utf8)
 
         // Update first: the common case after the very first launch.
-        let updateStatus = SecItemUpdate(baseQuery(service: service) as CFDictionary,
+        let updateStatus = SecItemUpdate(baseQuery(service: service, account: account) as CFDictionary,
                                          [kSecValueData as String: data] as CFDictionary)
         switch updateStatus {
         case errSecSuccess:
             return
         case errSecItemNotFound:
-            var attributes = baseQuery(service: service)
+            var attributes = baseQuery(service: service, account: account)
             attributes[kSecValueData as String] = data
             // The key is only needed while the user is using the app, so it
             // does not need to be readable before first unlock.
@@ -74,8 +74,8 @@ enum KeychainStore {
         }
     }
 
-    static func delete(service: String = service) throws {
-        let status = SecItemDelete(baseQuery(service: service) as CFDictionary)
+    static func delete(account: String = account, service: String = service) throws {
+        let status = SecItemDelete(baseQuery(service: service, account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(status)
         }

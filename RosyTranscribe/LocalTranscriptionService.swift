@@ -10,7 +10,8 @@ import FluidAudio
 struct LocalTranscriptionService {
 
     func transcribe(fileURL: URL, language: TranscriptionLanguage,
-                    expectedSpeakers: Int? = nil) async throws -> TranscriptionResponse {
+                    expectedSpeakers: Int? = nil,
+                    diarize: Bool = true) async throws -> TranscriptionResponse {
         guard LocalTranscriptionAvailability.isAvailable else {
             throw TranscriptionError.localUnavailable
         }
@@ -18,8 +19,20 @@ struct LocalTranscriptionService {
             throw TranscriptionError.localUnavailable
         }
 
+        if !diarize {
+            let recognizedWords = try await transcribeWords(fileURL: fileURL,
+                                                            locale: language.appleLocale)
+            return TranscriptionResponse(
+                text: recognizedWords.map(\.text).joined(separator: " "),
+                languageCode: language.appleLocale.language.languageCode?.identifier,
+                languageProbability: nil,
+                audioDurationSecs: try? Self.audioDuration(fileURL),
+                words: recognizedWords
+            )
+        }
+
         async let speech = transcribeWords(fileURL: fileURL, locale: language.appleLocale)
-        async let speakers = diarize(fileURL: fileURL, expectedSpeakers: expectedSpeakers)
+        async let speakers = self.diarize(fileURL: fileURL, expectedSpeakers: expectedSpeakers)
         let (recognizedWords, speakerSegments) = try await (speech, speakers)
         let words = Self.assignSpeakers(to: recognizedWords, from: speakerSegments)
 
