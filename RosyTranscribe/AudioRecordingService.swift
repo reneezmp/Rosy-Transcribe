@@ -120,6 +120,16 @@ final class AudioRecordingService: NSObject, ObservableObject {
 
     func reset() {
         guard state != .recording && state != .starting && state != .finishing else { return }
+        clearTransientState()
+    }
+
+    /// The unconditional half of `reset()`. `reset()` itself keeps its guard
+    /// so an outside caller — ContentView calls it when starting a fresh
+    /// recording — can never wipe the state of a recording in progress. But
+    /// `discard()` tears down capture on purpose *while* `.recording`, and
+    /// still needs to land back in `.idle` afterwards; it calls this instead
+    /// of `reset()` so it is not blocked by the same guard it just made moot.
+    private func clearTransientState() {
         result = nil
         errorMessage = nil
         systemAudioPermissionDenied = false
@@ -231,7 +241,12 @@ final class AudioRecordingService: NSObject, ObservableObject {
         if let directory { try? FileManager.default.removeItem(at: directory) }
         directory = nil
         mode = nil
-        reset()
+        // Not reset() — state is still .recording here, and reset()'s guard
+        // exists precisely to refuse to touch that. Discarding a live
+        // recording must still land in .idle, or the "Stop this recording?"
+        // alert keeps firing, stop() no-ops because mode is nil, and start()
+        // refuses every future recording until the app relaunches.
+        clearTransientState()
     }
 
     private func startMicrophone(at url: URL) throws {
@@ -288,7 +303,14 @@ final class AudioRecordingService: NSObject, ObservableObject {
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: systemQueue)
         self.stream = stream
-        self.pendingSystemURL = url
+        // Written here on the main actor, read on systemQueue inside the
+        // SCStreamOutput callback below. This happens before startCapture(),
+        // so there is no contention yet — but it goes through systemQueue
+        // regardless, so every access to this property, ever, is confined to
+        // one queue. Mixed access (some through the queue, some not) would
+        // still be a race; systemFile gets the same discipline for the same
+        // reason.
+        systemQueue.sync { self.pendingSystemURL = url }
         try await stream.startCapture()
     }
 
@@ -307,8 +329,7 @@ final class AudioRecordingService: NSObject, ObservableObject {
             try? await stream.stopCapture()
         }
         stream = nil
-        systemQueue.sync { self.systemFile = nil }
-        pendingSystemURL = nil
+        systemQueue.sync { self.systemFile = nil; self.pendingSystemURL = nil }
         startedAt = nil
         microphoneLevel = 0
         systemLevel = 0
@@ -326,6 +347,13 @@ final class AudioRecordingService: NSObject, ObservableObject {
         guard state == .recording else { return }
         errorMessage = AudioRecordingError.captureFailed(error.localizedDescription).localizedDescription
         state = .failed
+        // stop() and discard() both invalidate the timer; this path must too.
+        // Without it, the 0.2s repeating Timer stays scheduled on the run
+        // loop for the rest of the process — it only looks harmless because
+        // tearDownCapture() nils out startedAt, so the timer's closure gives
+        // up on updating elapsed rather than because it stopped firing.
+        timer?.invalidate()
+        timer = nil
         Task { await tearDownCapture() }
     }
 
@@ -384,6 +412,10 @@ extension AudioRecordingService: SCStreamOutput, SCStreamDelegate {
     func stream(_ stream: SCStream,
                 didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
                 of outputType: SCStreamOutputType) {
+        // This callback runs on systemQueue (it is the stream's
+        // sampleHandlerQueue), which is also the only queue that ever
+        // touches pendingSystemURL now — so this read needs no further
+        // synchronisation of its own.
         guard outputType == .audio, sampleBuffer.isValid, let url = pendingSystemURL else { return }
         do {
             try sampleBuffer.withAudioBufferList { audioBufferList, _ in

@@ -429,14 +429,14 @@ final class TranscriberModel: ObservableObject {
             }
             // Hide only complete ignored segments, before the final merge and
             // save. Existing transcript JSON remains untouched on load.
-            let ignoredRules = SettingsStore<IgnoredSegmentRule>(filename: "IgnoredSegments.json").load()
+            let ignoredRules = SharedSettings.ignoredSegments.values
             unfilteredTurns = turns
             turns = IgnoredSegmentFiltering.applying(ignoredRules, to: turns)
             if !turns.isEmpty { fallbackText = "" }
             speakerOrder = TranscriptFormatter.speakerIDs(in: turns)
             speakerColors = SpeakerColor.assign(to: speakerOrder)
             if speakerOrder.contains("speaker_local") {
-                if let you = SettingsStore<PersonProfile>(filename: "People.json").load().first(where: { $0.isYou }) {
+                if let you = SharedSettings.people.values.first(where: { $0.isYou }) {
                     speakerNames["speaker_local"] = you.displayName
                     speakerColors["speaker_local"] = you.color
                     speakerPersonIDs["speaker_local"] = you.id
@@ -555,6 +555,7 @@ final class TranscriberModel: ObservableObject {
         let turns: [SpeakerTurn]
         let fallbackText: String
         let speakerNames: [String: String]
+        let speakerPersonIDs: [String: UUID]
         let speakerColors: [String: SpeakerColor]
         let speakerOrder: [String]
         let detectedLanguage: String?
@@ -564,6 +565,7 @@ final class TranscriberModel: ObservableObject {
         EditSnapshot(turns: turns,
                      fallbackText: fallbackText,
                      speakerNames: speakerNames,
+                     speakerPersonIDs: speakerPersonIDs,
                      speakerColors: speakerColors,
                      speakerOrder: speakerOrder,
                      detectedLanguage: detectedLanguage)
@@ -573,6 +575,7 @@ final class TranscriberModel: ObservableObject {
         turns = snapshot.turns
         fallbackText = snapshot.fallbackText
         speakerNames = snapshot.speakerNames
+        speakerPersonIDs = snapshot.speakerPersonIDs
         speakerColors = snapshot.speakerColors
         speakerOrder = snapshot.speakerOrder
         detectedLanguage = snapshot.detectedLanguage
@@ -685,6 +688,10 @@ final class TranscriberModel: ObservableObject {
             speakerOrder.removeAll { $0 == speakerID }
             speakerNames[speakerID] = nil
             speakerColors[speakerID] = nil
+            // The link to a saved person goes with them. Leaving it behind
+            // would save a transcript that still claims this id belongs to
+            // someone, for a speaker who no longer exists.
+            speakerPersonIDs[speakerID] = nil
         }
     }
 
@@ -941,6 +948,10 @@ struct ContentView: View {
     @StateObject private var model = TranscriberModel()
     @StateObject private var cloudRegistry = CloudTranscriptionRegistry.shared
     @StateObject private var recorder = AudioRecordingService()
+    // Observed, not copied: the People menus below render from the same
+    // document the Settings pane edits, so a rename is visible here the
+    // moment it is typed and there is no roster to keep in step.
+    @StateObject private var savedPeople = SharedSettings.people
     @State private var page: WorkspacePage = .home
     @State private var recordingMode: RecordingMode = .microphone
     @State private var recordingTitle = ""
@@ -1057,8 +1068,14 @@ struct ContentView: View {
             }
             .onReceive(cloudRegistry.$providers) { providers in
                 let cloudAvailable = providers.contains { $0.id == CloudTranscriptionProvider.elevenLabs.id && $0.enabled && model.hasAPIKey }
-                if model.engine == .elevenLabs && !cloudAvailable {
-                    model.engine = LocalTranscriptionAvailability.isAvailable ? .onDevice : .elevenLabs
+                // `TranscriptionSourceSelection.fallback` is the tested source
+                // of truth for this decision; it returns nil only when there
+                // is nothing usable at all, in which case the current engine
+                // is left exactly as it is.
+                if let fallback = TranscriptionSourceSelection.fallback(active: model.engine,
+                                                                        enabledCloud: cloudAvailable,
+                                                                        localAvailable: LocalTranscriptionAvailability.isAvailable) {
+                    model.engine = fallback
                 }
             }
         }
@@ -2196,7 +2213,7 @@ struct ContentView: View {
 
                 Menu("Saved person") {
                     let query = IgnoredSegmentRule.normalize(model.speakerNames[id] ?? "")
-                    let saved = SettingsStore<PersonProfile>(filename: "People.json").load().filter { person in
+                    let saved = savedPeople.values.filter { person in
                         query.isEmpty || IgnoredSegmentRule.normalize(person.displayName).contains(query) || person.aliases.contains { IgnoredSegmentRule.normalize($0).contains(query) }
                     }
                     if saved.isEmpty { Text("No matching saved people") }
@@ -2207,7 +2224,7 @@ struct ContentView: View {
                 .menuStyle(.borderlessButton)
 
                 Menu {
-                    let people = SettingsStore<PersonProfile>(filename: "People.json").load()
+                    let people = savedPeople.values
                     if !people.isEmpty {
                         Section("Link to saved person") {
                             ForEach(people) { person in
