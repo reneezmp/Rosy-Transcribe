@@ -3,9 +3,12 @@ import Foundation
 /// One saved transcription.
 ///
 /// Everything needed to redisplay a transcript exactly as it was left: the
-/// grouped turns, plus the names and colours assigned to the speakers. The
-/// audio is not kept — this app never opens it, and a library of meeting
-/// recordings is a much bigger thing to look after than a library of text.
+/// grouped turns, plus the names and colours assigned to the speakers.
+///
+/// The audio is never *copied* here: a record stores paths, and playback opens
+/// them where they already are. A library of meeting recordings is a much
+/// bigger thing to look after than a library of text — and a recording the
+/// user deleted on purpose must not come back to life inside this folder.
 struct TranscriptRecord: Codable, Identifiable, Equatable {
     let id: UUID
     var title: String

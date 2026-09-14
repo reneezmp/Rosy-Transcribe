@@ -21,12 +21,15 @@ transcription happens over an API.
 
 - A Mac running **macOS 13 or later**. Intel or Apple Silicon; the build is
   universal.
-- An **ElevenLabs API key**. Transcription happens on their servers and is
-  billed per hour of audio, so this is not free to run. The app stores the key
-  in your login Keychain and sends it to nobody but ElevenLabs.
-- **Xcode**, to build it. There is no notarised download: the app is ad-hoc
-  signed, so a build fetched from a release needs a right-click → Open the
-  first time, and macOS will be blunt about not recognising the developer.
+- An **ElevenLabs API key**, unless you are on an Apple-silicon Mac running
+  macOS 26 and using **On This Mac** for everything. Transcription happens on
+  ElevenLabs' servers and is billed per hour of audio, so this is not free to
+  run. The app stores the key in your login Keychain and sends it to nobody but
+  ElevenLabs.
+- **Xcode**, to build it, and a **self-signed code-signing certificate** — see
+  [The signing identity](#the-signing-identity). There is no notarised
+  download, so a build fetched from a release needs a right-click → Open the
+  first time and macOS will be blunt about not recognising the developer.
   Building it yourself avoids that entirely.
 
 A word on what you are uploading. This sends your audio to a third party, so
@@ -60,11 +63,35 @@ Output lands in `build/RosyTranscribe.app`.
 
 You can also just open `RosyTranscribe.xcodeproj` and hit Run.
 
+### The signing identity
+
+**The project will not build until this certificate exists.** Both app
+configurations set `CODE_SIGN_IDENTITY = "Rosy Transcribe Local Signing"`, and
+`build.sh` deliberately fails if signing falls back to ad-hoc.
+
+That is not ceremony. macOS grants microphone and screen-recording permission
+to a *signature*, and an ad-hoc signature is different on every build — so an
+ad-hoc Rosy would ask for both permissions again after every rebuild, and quietly
+lose the ability to record until you granted them. A stable local identity makes
+the grant stick.
+
+Create it once, in **Keychain Access**:
+
+1. **Keychain Access ▸ Certificate Assistant ▸ Create a Certificate…**
+2. Name: `Rosy Transcribe Local Signing` — exactly, it is matched by name.
+3. Identity Type: **Self Signed Root**. Certificate Type: **Code Signing**.
+4. Create, and leave it in the **login** keychain.
+
+It never leaves your Mac, and it is unrelated to the Sparkle update key — that
+one signs *releases*, this one signs *builds*.
+
 ## Install on Rosy
 
 Copy `RosyTranscribe.app` across, then **right-click → Open** the first time.
-The app is signed to run locally, not notarised, so a plain double-click will
-be refused by Gatekeeper. Once opened this way it launches normally thereafter.
+The app is self-signed with a local identity rather than notarised, so a plain
+double-click will be refused by Gatekeeper. Once opened this way it launches
+normally thereafter, and because the identity is stable the microphone and
+screen-recording permissions survive later updates.
 
 ## Use
 
@@ -73,16 +100,16 @@ be refused by Gatekeeper. Once opened this way it launches normally thereafter.
    headphones are strongly recommended to prevent doubled speech.
 2. Choose **ElevenLabs** or **On This Mac** in the Transcription menu. On This
    Mac is available only on Apple silicon running macOS 26 or later.
-3. For ElevenLabs, click the key in the toolbar and paste your API key into its
-   popover. It is stored in the Keychain and remembered. The field is masked;
-   the eye button reveals it. Pressing Transcribe without a key opens this
-   popover automatically.
+3. For ElevenLabs, open **Settings ▸ Cloud Transcription** — the key button in
+   the toolbar goes straight there — and paste your API key. It is stored in the
+   Keychain and remembered. The field is masked; **Reveal** shows it. Pressing
+   Transcribe with no usable engine opens Settings rather than failing.
 4. Pick a language, or leave it on Auto-detect. In local mode, Auto uses the
    Mac's current language because Apple Speech does not auto-detect languages.
-   For an imported or system-audio file, choose **Expected speakers** when the
-   headcount is known. A two-track meeting instead asks for **Remote speakers**:
-   choose 1 for a class with one student, or the number of people heard through
-   the Mac for a group call.
+   **Expected speakers** appears when On This Mac is selected and the recording
+   is not a two-track meeting; set it when the headcount is known. A two-track
+   meeting instead asks for **Remote speakers**: choose 1 for a class with one
+   student, or the number of people heard through the Mac for a group call.
 5. Optionally add key terms — see below. They currently apply to ElevenLabs.
 6. Transcribe. Long recordings can take several minutes.
 7. Copy All.
@@ -110,7 +137,10 @@ directly above the People panel.
 | `SegmentTextView.swift` | The editable, selectable, highlightable segment |
 | `AudioPlaybackService.swift` | Local playback, seeking, and playhead state |
 | `AudioRecordingService.swift` | Separate microphone/system capture, levels, permissions, and local recording storage |
-| `KeychainStore.swift` | The API key, and migration off `UserDefaults` |
+| `SettingsModels.swift` | Settings value types, their JSON stores, and ignored-segment filtering |
+| `SettingsView.swift` | The five settings panes |
+| `UpdaterService.swift` | Sparkle, behind `canImport` |
+| `KeychainStore.swift` | Every secret, and migration off `UserDefaults` |
 
 `TranscriptFormatter`, `MultipartBuilder` and `Keyterms` are free of UI and
 networking types, which is what makes them testable without an API key.
@@ -210,6 +240,43 @@ finding that out on a ten-second clip is much faster than on a full meeting.
 Steps 1–3 can run on the M4. Step 4 has to happen on Rosy; it is the only test
 that exercises the actual constraint.
 
+## Settings
+
+**Settings** in the sidebar holds five panes. Everything here is per-Mac, not
+per-transcript.
+
+**Cloud Transcription** — the ElevenLabs API key, and a switch for whether
+ElevenLabs appears in the engine picker at all. Turning it off leaves the key
+in place; deleting the key also unregisters the provider. The switch refuses to
+turn on without a saved key, since an engine that cannot run is worse than one
+that is absent.
+
+**Local Transcription** — whether Apple Speech is available on this Mac, and
+why not when it is not. Nothing to configure yet.
+
+Edits here save themselves — there is no Save button for a name, a colour or a
+rule, and leaving the pane writes out anything still pending. AI services are
+the exception: a base URL is confirmed with **Save**, so a half-typed address
+is never stored.
+
+**People** — a directory of the people you actually meet with: a name, a
+colour, and one of them marked **You**. In a transcript, the People panel can
+link a speaker to someone here, which copies their name and colour across. The
+link is a *snapshot*: renaming someone later never rewrites a transcript you
+have already saved. The microphone track of a voice note or meeting is
+automatically given whoever is marked You.
+
+**Ignored Segments** — phrases to drop when a transcript comes back. Matching is
+**whole-segment only** and normalised for case, accents and spacing, so a rule
+of `obrigada` hides a segment that is exactly "Obrigada." and leaves
+"Obrigada, doutora, mas não" alone. Rules apply at transcription time; the
+original turns are kept, and a banner offers **Restore**.
+
+**AI Services** — registration for a DeepSeek or OpenAI-compatible endpoint,
+with its key in the Keychain. **This is scaffolding.** Nothing in the app sends
+anything to these services yet; registering one makes no request and costs
+nothing. HTTP is refused unless the host is local.
+
 ## The API key
 
 The key lives in the login Keychain, under service `com.rosy.RosyTranscribe`.
@@ -218,11 +285,16 @@ and `KeychainStore.migrateLegacyKeyIfNeeded()` moves an old key across on
 first launch and deletes the plist copy. That migration only removes the copy
 once the Keychain write has succeeded, so a failure loses nothing.
 
-**Expect a Keychain prompt after each rebuild.** The app is ad-hoc signed, so
-its signature changes every time you build it, and macOS treats each build as
-a different application asking for the same secret. Click "Always Allow" and
-it will stay quiet until the next build. This is a consequence of not having a
-paid Developer Program identity, not a bug.
+AI-service keys live in the same Keychain service, one account per service,
+named with that service's UUID. Deleting a service deletes its key with it.
+
+**A Keychain prompt after a rebuild means the signature changed.** macOS ties a
+secret to the application that stored it, and identifies the application by its
+signature. While the app was ad-hoc signed that happened on *every* build, which
+is one of the reasons the project moved to the stable `Rosy Transcribe Local
+Signing` identity — see [The signing identity](#the-signing-identity). Click
+"Always Allow" if you are asked; if you are asked repeatedly, the build is
+falling back to ad-hoc and `build.sh` will say so.
 
 ## Key terms
 
@@ -298,7 +370,8 @@ the data and join on output, exactly as a reassignment does.
 ### Finding things
 
 ⌘F, or the magnifying glass in the toolbar, opens a find bar over the
-transcript. Return jumps to the next match, ⇧⌫ the previous, Escape closes it.
+transcript. Return jumps to the next match, the chevrons step either way, and
+Escape closes it.
 The current match is solid, the others tinted, and the list scrolls to keep
 the current one centred.
 
@@ -342,8 +415,9 @@ speaker cleanup before producing the readable transcript.
 Every transcription is saved automatically, the moment it comes back — a
 transcription costs money and minutes, and must survive a crash. The sidebar
 lists them newest first; click one to reopen it exactly as it was left, names
-and colours included. The toolbar has a toggle to collapse the sidebar and a
-button to start a new transcription.
+and colours included. The toolbar carries the API key, Find, and a button to
+start a new transcription; the sidebar collapses with the split-view control
+macOS puts there itself.
 
 Edits to the title, a speaker's name, or a speaker's colour are saved on a
 1.2-second delay. Writing the whole transcript on every keystroke would be a
@@ -361,6 +435,28 @@ unreadable costs one meeting rather than all of them, and any of them can be
 opened in a text editor. **The audio is not copied** — the transcript remembers
 only its original path, and a library of meeting recordings is a much bigger
 thing to look after than a library of text.
+
+### Everything Rosy writes
+
+```
+~/Library/Application Support/RosyTranscribe/
+├── Transcripts/<uuid>.json                    one saved transcript each
+├── Recordings/<uuid>/microphone.caf, system.caf   audio Rosy recorded itself
+├── CloudTranscriptionProviders.json
+├── People.json
+├── IgnoredSegments.json
+└── AIServices.json                            metadata only, never keys
+```
+
+Every file is written `0600` inside a `0700` directory. These are privileged
+meetings; the default world-readable mode is more exposure than they deserve.
+
+Two different kinds of audio, treated differently: a file **you** chose is never
+copied, and the transcript only remembers where it was. A recording **Rosy
+made** lives in `Recordings/` and stays there. Discarding a recording before
+using it deletes it — but after that, nothing cleans up, and deleting a
+transcript leaves its audio on disk. If you record meetings regularly, that
+folder is worth visiting in Finder now and then.
 
 ## Audio playback
 
@@ -481,6 +577,7 @@ Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` before running it.
 Sparkle orders updates by `CFBundleVersion`, so a build that does not increase
 is a build nobody is ever offered.
 
-## Not in v1 or v2, deliberately
+## Not built yet, deliberately
 
-A settings screen, SRT output, progress percentage.
+SRT output, and a progress percentage. The AI Services pane is registered but
+unused — see [Settings](#settings).

@@ -10,10 +10,11 @@ import AppKit
 /// click places a caret, a drag selects, typing edits, and search matches can
 /// be highlighted while all of that is true.
 ///
-/// It is also the groundwork for click-a-word-to-play: `NSTextView` can map a
-/// point to a character index, which is what turning a click into a timestamp
-/// will need. That gesture is deliberately not bound yet — there is no audio
-/// to seek, and double-click already means "select word" to the system.
+/// It is also what makes click-a-word-to-play possible: `NSTextView` maps a
+/// point to a character index, which is how a click becomes a timestamp. That
+/// gesture is bound to **Option**-click rather than a plain one, because an
+/// ordinary click has to keep meaning "place the caret" and a double-click has
+/// to keep meaning "select word".
 struct SegmentTextView: NSViewRepresentable {
 
     @Binding var text: String

@@ -5,11 +5,12 @@ import Sparkle
 
 /// Checking GitHub for a newer build, via Sparkle.
 ///
-/// Sparkle is the one third-party dependency in this project. It was taken on
-/// deliberately: replacing a running application is genuinely hard to get
-/// right, and the alternative was hand-rolling the download, signature check,
-/// atomic swap and relaunch — the part where a bug eats the app. Sparkle is
-/// the tool every other Mac app uses for exactly this.
+/// Sparkle is one of this project's two dependencies, the other being
+/// FluidAudio for local diarisation. It was taken on deliberately: replacing a
+/// running application is genuinely hard to get right, and the alternative was
+/// hand-rolling the download, signature check, atomic swap and relaunch — the
+/// part where a bug eats the app. Sparkle is the tool every other Mac app uses
+/// for exactly this.
 ///
 /// The whole file is behind `canImport`, so the app still builds and runs
 /// without the package. Updating is simply absent until Sparkle is added to
