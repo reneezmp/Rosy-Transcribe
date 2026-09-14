@@ -73,6 +73,139 @@ struct SettingsEnvelope<Value: Codable>: Codable {
     var values: [Value]
 }
 
+/// A settings file held in memory, written back whenever it changes.
+///
+/// The panes bind straight into `values`, and that is exactly why saving
+/// cannot be left to the buttons. A name typed into a `TextField` and a toggle
+/// flipped in a row both mutate the array without passing through any action
+/// of ours — and both were silently lost, every time, before this type
+/// existed. Every mutation now schedules a write, so forgetting to call a
+/// `persist…()` helper is no longer possible.
+///
+/// Debounced for the same reason the transcript is: on the 2017 dual-core a
+/// file write per keystroke is real work. `save()` forces one out immediately
+/// for structural edits — adding or deleting an entry — and `flush()` writes
+/// anything still pending when the pane goes away.
+@MainActor final class SettingsDocument<Value: Codable & Equatable>: ObservableObject {
+
+    @Published var values: [Value] {
+        didSet {
+            guard values != oldValue else { return }
+            pendingSave = true
+            scheduleSave()
+        }
+    }
+    /// Nil unless the last write failed. Surfaced by the pane, because a
+    /// settings file that cannot be written is worth knowing about.
+    @Published private(set) var lastError: String?
+
+    private let store: SettingsStore<Value>
+    private var saveTask: Task<Void, Never>?
+    private var pendingSave = false
+
+    init(store: SettingsStore<Value>) {
+        self.store = store
+        self.values = store.load()
+    }
+
+    convenience init(filename: String) {
+        self.init(store: SettingsStore(filename: filename))
+    }
+
+    /// Writes now, cancelling any pending debounced write.
+    func save() {
+        saveTask?.cancel()
+        saveTask = nil
+        pendingSave = false
+        do {
+            try store.save(values)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Writes only if something is actually waiting to be written.
+    func flush() {
+        guard pendingSave else { return }
+        save()
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.save()
+        }
+    }
+}
+
+/// The settings two screens have to agree about.
+///
+/// Both the Settings panes and the transcript read the People directory and
+/// the ignored-segment rules, and a copy on each side is a copy that can be
+/// stale: rename someone in Settings, walk back to a transcript, and the
+/// People menus would offer the old name until something happened to reload
+/// them. One owner, held in memory, removes the question — and removes the
+/// file read from the view body at the same time. Writing to disk stays
+/// debounced, because that only matters across launches.
+@MainActor
+enum SharedSettings {
+    static let people = SettingsDocument<PersonProfile>(filename: "People.json")
+    static let ignoredSegments = SettingsDocument<IgnoredSegmentRule>(filename: "IgnoredSegments.json")
+}
+
+/// Which base URLs an AI service is allowed to use.
+///
+/// HTTPS anywhere; plain HTTP only to this Mac or this LAN, because an API key
+/// travelling in cleartext to a public host is a leak.
+///
+/// The check has to read the host as an *address*, not as text. The first
+/// attempt matched prefixes — `host.hasPrefix("10.")` — which accepts
+/// `10.evil.example.com`, a perfectly public hostname, and rejects
+/// `172.16.0.5`, which is genuinely private. Prefix-matching a hostname
+/// answers a different question from the one being asked.
+enum LocalEndpointPolicy {
+
+    static func allows(_ value: String) -> Bool {
+        guard let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased(), !host.isEmpty else { return false }
+        if scheme == "https" { return true }
+        guard scheme == "http" else { return false }
+        return isLoopbackOrPrivate(host)
+    }
+
+    static func isLoopbackOrPrivate(_ host: String) -> Bool {
+        // The two names that mean "near me": loopback, and Bonjour.
+        if host == "localhost" || host == "::1" || host.hasSuffix(".local") { return true }
+        // Anything else has to be a literal address. A name cannot be trusted,
+        // because what it resolves to is not ours to decide.
+        guard let octets = ipv4Octets(host) else { return false }
+        switch (octets[0], octets[1]) {
+        case (127, _): return true          // 127.0.0.0/8, loopback
+        case (10, _): return true           // 10.0.0.0/8
+        case (172, 16...31): return true    // 172.16.0.0/12
+        case (192, 168): return true        // 192.168.0.0/16
+        case (169, 254): return true        // 169.254.0.0/16, link-local
+        default: return false
+        }
+    }
+
+    private static func ipv4Octets(_ host: String) -> [Int]? {
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return nil }
+        var octets: [Int] = []
+        for part in parts {
+            guard !part.isEmpty, part.allSatisfy(\.isNumber),
+                  let value = Int(part), (0...255).contains(value) else { return nil }
+            octets.append(value)
+        }
+        return octets
+    }
+}
+
 struct SettingsStore<Value: Codable> {
     let url: URL
     init(filename: String) {

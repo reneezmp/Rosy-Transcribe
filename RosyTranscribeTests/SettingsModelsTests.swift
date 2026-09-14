@@ -69,6 +69,102 @@ import XCTest
         XCTAssertNil(TranscriptionSourceSelection.fallback(active: .elevenLabs, enabledCloud: false, localAvailable: false))
     }
 
+    // MARK: Endpoint policy
+
+    func testHTTPSIsAllowedAnywhereAndOtherSchemesAreNot() {
+        XCTAssertTrue(LocalEndpointPolicy.allows("https://api.deepseek.com"))
+        XCTAssertTrue(LocalEndpointPolicy.allows("https://api.openai.com/v1"))
+        XCTAssertFalse(LocalEndpointPolicy.allows("ftp://example.com"))
+        XCTAssertFalse(LocalEndpointPolicy.allows("not a url"))
+        XCTAssertFalse(LocalEndpointPolicy.allows(""))
+    }
+
+    func testPlainHTTPIsAllowedOnlyOnThisMacOrThisNetwork() {
+        for allowed in ["http://localhost:11434",
+                        "http://127.0.0.1:8080",
+                        "http://mini.local:1234",
+                        "http://10.0.0.4:11434",
+                        "http://172.16.0.5:11434",
+                        "http://172.31.255.254",
+                        "http://192.168.1.10:3000",
+                        "http://169.254.10.1"] {
+            XCTAssertTrue(LocalEndpointPolicy.allows(allowed), allowed)
+        }
+        for blocked in ["http://api.openai.com",
+                        "http://203.0.113.9",
+                        "http://172.32.0.1",
+                        "http://172.15.0.1",
+                        "http://192.169.0.1",
+                        "http://11.0.0.1"] {
+            XCTAssertFalse(LocalEndpointPolicy.allows(blocked), blocked)
+        }
+    }
+
+    /// The bug this policy replaced: `host.hasPrefix("10.")` accepts a public
+    /// hostname that merely starts with those characters, which is how an API
+    /// key would have travelled in cleartext to somebody else's server.
+    func testPrivateLookingHostnamesAreNotTreatedAsPrivateAddresses() {
+        XCTAssertFalse(LocalEndpointPolicy.allows("http://10.evil.example.com"))
+        XCTAssertFalse(LocalEndpointPolicy.allows("http://192.168.evil.com"))
+        XCTAssertFalse(LocalEndpointPolicy.allows("http://127.0.0.1.example.com"))
+        XCTAssertFalse(LocalEndpointPolicy.allows("http://10.0.0.999"))
+    }
+
+    // MARK: Settings documents
+
+    private func temporaryPeopleStore() -> SettingsStore<PersonProfile> {
+        SettingsStore(url: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".json"))
+    }
+
+    /// The defect this type exists to make impossible: a pane binds straight
+    /// into the array, so an edit that passes through no button of ours must
+    /// still be written.
+    func testEditingAValueInPlaceIsPersisted() {
+        let store = temporaryPeopleStore()
+        defer { try? FileManager.default.removeItem(at: store.url) }
+
+        let document = SettingsDocument(store: store)
+        document.values = [PersonProfile(displayName: "Speaker 2", isYou: true)]
+        document.save()
+
+        document.values[0].displayName = "Dra. Silva"
+        XCTAssertNil(document.lastError)
+        document.flush()
+
+        let reloaded = SettingsDocument(store: store)
+        XCTAssertEqual(reloaded.values.count, 1)
+        XCTAssertEqual(reloaded.values.first?.displayName, "Dra. Silva")
+        XCTAssertEqual(reloaded.values.first?.isYou, true)
+    }
+
+    func testFlushWritesNothingWhenNothingChanged() {
+        let store = temporaryPeopleStore()
+        defer { try? FileManager.default.removeItem(at: store.url) }
+
+        let document = SettingsDocument(store: store)
+        document.flush()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.url.path))
+        XCTAssertNil(document.lastError)
+    }
+
+    func testDisablingARuleSurvivesAReload() {
+        let store = SettingsStore<IgnoredSegmentRule>(url: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".json"))
+        defer { try? FileManager.default.removeItem(at: store.url) }
+
+        let document = SettingsDocument(store: store)
+        document.values = [IgnoredSegmentRule(text: "Obrigada.")]
+        document.save()
+
+        document.values[0].enabled = false
+        document.flush()
+
+        let reloaded = SettingsDocument(store: store)
+        XCTAssertEqual(reloaded.values.first?.enabled, false)
+        XCTAssertFalse(reloaded.values[0].matches("Obrigada."))
+    }
+
     func testAvailabilityFallbacks() {
         XCTAssertEqual(TranscriptionSourceSelection.fallback(active: .elevenLabs, enabledCloud: true, localAvailable: false), .elevenLabs)
         XCTAssertEqual(TranscriptionSourceSelection.fallback(active: .elevenLabs, enabledCloud: false, localAvailable: true), .onDevice)
